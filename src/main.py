@@ -19,7 +19,7 @@ from .core.config import get_settings
 from .core.exceptions import AppException
 from .core.logging import get_logger, setup_logging
 from .core.middleware import RequestIdMiddleware, RequestLoggingMiddleware
-from .db.session import init_db
+from .db.session import init_db, reset_database
 from .services import create_lightrag_client
 
 setup_logging()
@@ -28,7 +28,9 @@ logger = get_logger("aitutor.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时建表并创建 LightRAGClient；shutdown 时关闭客户端。"""
+    """启动时重置数据库（清空旧数据文件）再建表，然后创建 LightRAGClient；shutdown 时关闭客户端。"""
+    logger.info("resetting database (drop existing data file)")
+    reset_database()
     logger.info("initializing database (create tables if missing)")
     init_db()
 
