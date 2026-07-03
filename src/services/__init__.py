@@ -3,6 +3,7 @@
 from .lightrag_client import LightRAGClient
 from .llm_client import LLMClient
 from .search_client import SearchClient
+from .quiz_service import QuizService
 
 
 def create_lightrag_client() -> LightRAGClient:
@@ -41,6 +42,11 @@ def create_search_client() -> SearchClient | None:
     return SearchClient(
         max_results=settings.search_max_results,
     )
+
+
+def create_quiz_service(llm_client: LLMClient, lightrag_client: LightRAGClient) -> QuizService:
+    """创建出题服务（依赖注入 LLMClient + LightRAGClient）。在 lifespan 启动时调用一次。"""
+    return QuizService(llm=llm_client, lightrag=lightrag_client)
 
 
 def create_memory_manager(llm_client: LLMClient) -> "MemoryManager":

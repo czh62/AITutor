@@ -15,6 +15,7 @@ from .api.documents import router as documents_router
 from .api.graph import router as graph_router
 from .api.health import router as health_router
 from .api.query import router as query_router
+from .api.quiz import router as quiz_router
 from .core.config import get_settings
 from .core.exceptions import AppException
 from .core.logging import get_logger, setup_logging
@@ -24,6 +25,7 @@ from .services import (
     create_lightrag_client,
     create_llm_client,
     create_memory_manager,
+    create_quiz_service,
     create_search_client,
 )
 
@@ -60,6 +62,11 @@ async def lifespan(app: FastAPI):
     memory_manager = create_memory_manager(llm_client)
     app.state.memory_manager = memory_manager
     logger.info("memory manager created")
+
+    # 创建 QuizService（出题服务），存到 app.state
+    quiz_service = create_quiz_service(llm_client, lightrag_client)
+    app.state.quiz_service = quiz_service
+    logger.info("quiz service created")
 
     logger.info("application startup complete")
     yield
@@ -99,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(documents_router)
     app.include_router(graph_router)
     app.include_router(query_router)
+    app.include_router(quiz_router)
 
     return app
 

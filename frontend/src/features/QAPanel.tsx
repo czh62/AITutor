@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowUpIcon, SquareIcon, EraserIcon, GraduationCapIcon, GlobeIcon } from 'lucide-react'
+import { ArrowUpIcon, SquareIcon, EraserIcon, GraduationCapIcon, GlobeIcon, BrainIcon } from 'lucide-react'
 import { useQAStore } from '@/stores/qa'
-import { queryStream, resumeStream } from '@/api/aitutor'
+import { queryStream, resumeStream, quizGenerateStream } from '@/api/aitutor'
 import { QUERY_MODE_OPTIONS } from '@/api/types'
-import type { AskUserPayload, QueryMode, ReferenceItem, StreamEvent } from '@/api/types'
+import type { AskUserPayload, QueryMode, QuizDifficulty, QuizQuestion, QuizQuestionType, ReferenceItem, StreamEvent } from '@/api/types'
 import ChatMessage from '@/components/qa/ChatMessage'
+import QuizConfigDialog from '@/components/qa/QuizConfigDialog'
 import { cn } from '@/lib/utils'
 
 /**
@@ -28,6 +29,7 @@ export default function QAPanel() {
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [forceWebSearch, setForceWebSearch] = useState(false)
+  const [showQuizDialog, setShowQuizDialog] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -204,6 +206,73 @@ export default function QAPanel() {
     setIsStreaming(false)
   }, [])
 
+  /**
+   * 出题流程：用户配置完成后触发。
+   * 与普通查询共用 ChatMessage 渲染，但出题内容通过 quizQuestions 字段展示 QuizCard。
+   */
+  const handleQuizConfirm = useCallback(
+    async (config: { topic: string; num_questions: number; difficulty: QuizDifficulty; question_types: QuizQuestionType[] }) => {
+      setShowQuizDialog(false)
+      const assistantId = genId()
+      const assistantMsg = {
+        id: assistantId,
+        role: 'assistant' as const,
+        content: `正在为「${config.topic}」生成 ${config.num_questions} 道题目…`,
+        isStreaming: true,
+        traceEvents: [] as StreamEvent[],
+        quizQuestions: [] as QuizQuestion[],
+      }
+      const userMsg = { id: genId(), role: 'user' as const, content: `为「${config.topic}」出 ${config.num_questions} 题` }
+      addMessage(userMsg)
+      addMessage(assistantMsg)
+      setIsStreaming(true)
+      const controller = new AbortController()
+      abortRef.current = controller
+
+      const events: StreamEvent[] = []
+      const questions: QuizQuestion[] = []
+
+      try {
+        await quizGenerateStream(
+          { topic: config.topic, num_questions: config.num_questions, difficulty: config.difficulty, question_types: config.question_types },
+          {
+            onProgress: (msg) => {
+              updateMessage(assistantId, { content: msg })
+            },
+            onQuestion: (q) => {
+              questions.push(q)
+              updateMessage(assistantId, { quizQuestions: [...questions] })
+            },
+            onResult: (qs) => {
+              // 生成完成，更新 assistant content 为题目摘要
+              const summary = qs.map((q, i) => `第 ${i + 1} 题（${q.question_type}）：${q.question.substring(0, 60)}…`).join('\n')
+              updateMessage(assistantId, {
+                content: summary || '出题完成',
+                isStreaming: false,
+                quizQuestions: qs,
+              })
+            },
+            onError: (msg) => {
+              updateMessage(assistantId, { content: msg, isError: true, isStreaming: false })
+            },
+            onLoopEvent: (event) => {
+              events.push({ ...event, timestamp: Date.now() / 1000 })
+              updateMessage(assistantId, { traceEvents: [...events] })
+            },
+            signal: controller.signal,
+          }
+        )
+      } catch {
+        /* 已在 quizGenerateStream 内通过 onError 上报 */
+      } finally {
+        updateMessage(assistantId, { isStreaming: false })
+        setIsStreaming(false)
+        abortRef.current = null
+      }
+    },
+    [addMessage, updateMessage]
+  )
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       {/* 消息区 / 空状态问候语 —— 占满主区 */}
@@ -241,6 +310,15 @@ export default function QAPanel() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 出题配置对话框 */}
+      {showQuizDialog && (
+        <QuizConfigDialog
+          onConfirm={handleQuizConfirm}
+          onCancel={() => setShowQuizDialog(false)}
+          isStreaming={isStreaming}
+        />
       )}
 
       {/* Composer —— 始终底部，空状态 720px / 有消息 960px，宽度过渡 */}
@@ -305,6 +383,19 @@ export default function QAPanel() {
               <GlobeIcon className="h-3.5 w-3.5" />
               <span className="text-xs font-medium">联网搜索</span>
             </label>
+
+            {/* 出题按钮 */}
+            <button
+              type="button"
+              onClick={() => setShowQuizDialog(true)}
+              disabled={isStreaming}
+              aria-label="出题"
+              title="智能出题"
+              className="flex items-center gap-1 cursor-pointer select-none text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+            >
+              <BrainIcon className="h-3.5 w-3.5" />
+              <span className="text-xs font-medium">出题</span>
+            </button>
 
             {/* 右：清空 + 发送/停止 */}
             <div className="ml-auto flex items-center gap-1.5">

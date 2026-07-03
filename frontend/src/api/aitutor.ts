@@ -30,7 +30,9 @@ import type {
   ReferenceItem,
   LoopEvent,
   AskUserPayload,
-  SourceItem
+  SourceItem,
+  QuizGenerateRequest,
+  QuizQuestion
 } from './types'
 
 // ---- mock 数据与状态（仅 VITE_USE_MOCK=true 时使用） ----
@@ -776,5 +778,110 @@ async function queryStreamMock(
     onChunk(chunk)
     // eslint-disable-next-line no-await-in-loop
     await delay(60 + Math.random() * 80)
+  }
+}
+
+// ============================================================
+//  12. 出题流式接口
+// ============================================================
+
+/**
+ * POST /quiz/generate/stream — NDJSON 流式出题。
+ * 逐行解析 QuizService StreamEvent，按 type + metadata.call_kind 路由到回调：
+ * - progress → onProgress（出题进度消息）
+ * - content + call_kind="quiz_question" → onQuestion（解析题目 JSON）
+ * - result → onResult（所有题目完成）
+ * - error → onError
+ */
+export async function quizGenerateStream(
+  request: QuizGenerateRequest,
+  callbacks: {
+    onProgress: (msg: string) => void
+    onQuestion: (question: QuizQuestion) => void
+    onResult: (questions: QuizQuestion[]) => void
+    onError: (msg: string) => void
+    onLoopEvent?: (event: LoopEvent) => void
+    signal?: AbortSignal
+  }
+): Promise<void> {
+  const { onProgress, onQuestion, onResult, onError, onLoopEvent, signal } = callbacks
+  try {
+    const resp = await fetch(`${backendBaseUrl}/quiz/generate/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/x-ndjson'
+      },
+      body: JSON.stringify(request),
+      signal
+    })
+    if (!resp.ok || !resp.body) {
+      onError(`出题失败：HTTP ${resp.status}`)
+      return
+    }
+
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    const allQuestions: QuizQuestion[] = []
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed) continue
+        try {
+          const parsed = JSON.parse(trimmed)
+          const eventType = parsed.type as string | undefined
+          const metadata = parsed.metadata ?? {}
+          const content = parsed.content ?? ''
+
+          if (eventType === 'progress') {
+            onProgress(String(content))
+            if (onLoopEvent) {
+              onLoopEvent({ type: 'progress', round: parsed.round ?? 0, content: String(content), metadata })
+            }
+          } else if (eventType === 'content' && metadata.call_kind === 'quiz_question') {
+            // 题目 JSON 在 metadata.question 中
+            const qData = metadata.question as QuizQuestion | undefined
+            if (qData) {
+              onQuestion(qData)
+              allQuestions.push(qData)
+            }
+            if (onLoopEvent) {
+              onLoopEvent({ type: 'content', round: parsed.round ?? 0, content: String(content), metadata })
+            }
+          } else if (eventType === 'result') {
+            // Result 事件也包含完整题目列表
+            const resultQuestions = metadata.questions as QuizQuestion[] | undefined
+            if (resultQuestions && Array.isArray(resultQuestions)) {
+              // 如果 content 事件没有捕获题目，从 result 补充
+              if (allQuestions.length === 0) {
+                for (const q of resultQuestions) {
+                  onQuestion(q)
+                  allQuestions.push(q)
+                }
+              }
+            }
+            onResult(allQuestions)
+          } else if (eventType === 'error') {
+            onError(String(content) || '出题失败')
+          } else if (eventType === 'session' || eventType === 'stage_start' || eventType === 'stage_end' || eventType === 'thinking') {
+            if (onLoopEvent) {
+              onLoopEvent({ type: eventType as LoopEvent['type'], round: parsed.round ?? 0, content: String(content), metadata })
+            }
+          }
+        } catch {
+          /* 跳过无法解析的行 */
+        }
+      }
+    }
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return
+    onError?.(err instanceof Error ? err.message : String(err))
   }
 }

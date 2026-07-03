@@ -42,6 +42,10 @@ export default defineConfig({
       '/query': {
         target: 'http://localhost:8000',
         changeOrigin: true
+      },
+      '/quiz': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
       }
     }
   },

@@ -247,6 +247,8 @@ export interface ChatMessage {
   // ask_user 暂停态：loop 等待用户回复
   askUserPayload?: AskUserPayload
   isWaitingForInput?: boolean
+  // 出题结果：出题流程产出的题目列表
+  quizQuestions?: QuizQuestion[]
 }
 
 /** AgentLoop 思维链追踪 */
@@ -290,6 +292,64 @@ export interface StreamEvent {
 
 /** 旧版事件类型别名，向后兼容 */
 export type LoopEvent = StreamEvent
+
+// ============================================================
+//  出题（对齐后端 src/schemas/quiz.py 与 QuizService NDJSON 流）
+// ============================================================
+
+/** 题型分类（对齐后端 QuestionType） */
+export type QuizQuestionType = 'choice' | 'concept' | 'fill_in_blank' | 'short_answer' | 'written' | 'coding'
+
+/** 出题难度 */
+export type QuizDifficulty = 'easy' | 'medium' | 'hard' | 'auto'
+
+/** 出题请求体 */
+export interface QuizGenerateRequest {
+  topic: string
+  num_questions: number
+  difficulty: QuizDifficulty
+  question_types: QuizQuestionType[]  // 空=任意题型
+}
+
+/** 单道题目（对齐后端 QuizQuestion） */
+export interface QuizQuestion {
+  question_id: string
+  question: string
+  question_type: QuizQuestionType
+  correct_answer: string
+  explanation: string
+  options: Record<string, string> | null
+  topic: string
+  difficulty: string
+}
+
+/** 题型下拉选项（中文标签） */
+export const QUIZ_QUESTION_TYPE_OPTIONS: { value: QuizQuestionType; label: string }[] = [
+  { value: 'choice', label: '选择题' },
+  { value: 'concept', label: '判断题' },
+  { value: 'fill_in_blank', label: '填空题' },
+  { value: 'short_answer', label: '简答题' },
+  { value: 'written', label: '论述题' },
+  { value: 'coding', label: '编程题' },
+]
+
+/** 题型中文标签映射 */
+export const QUIZ_TYPE_LABELS: Record<QuizQuestionType, string> = {
+  choice: '选择题',
+  concept: '判断题',
+  fill_in_blank: '填空题',
+  short_answer: '简答题',
+  written: '论述题',
+  coding: '编程题',
+}
+
+/** 难度下拉选项 */
+export const QUIZ_DIFFICULTY_OPTIONS: { value: QuizDifficulty; label: string }[] = [
+  { value: 'auto', label: '自动' },
+  { value: 'easy', label: '简单' },
+  { value: 'medium', label: '中等' },
+  { value: 'hard', label: '困难' },
+]
 
 /** Query Mode 下拉选项（默认 mix） */
 export const QUERY_MODE_OPTIONS: { value: QueryMode; label: string }[] = [

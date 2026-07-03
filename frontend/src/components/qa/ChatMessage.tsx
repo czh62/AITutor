@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import type { ChatMessage as ChatMessageType, StreamEvent } from '@/api/types'
 import ThinkingBlock from '@/components/qa/ThinkingBlock'
 import AskUserCard from '@/components/qa/AskUserCard'
+import QuizCard from '@/components/qa/QuizCard'
 import { AssistantActivity, loopTraceToEvents } from '@/components/qa/TracePanels'
 import { parseThinking } from '@/lib/parseThinking'
 
@@ -113,7 +114,16 @@ export default function ChatMessage({ message, onAskUserRespond }: ChatMessagePr
           </>
         ) : null}
 
-        {/* 4. References footer */}
+        {/* 5. QuizCards（出题结果） */}
+        {message.quizQuestions && message.quizQuestions.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {message.quizQuestions.map((q, i) => (
+              <QuizCard key={q.question_id} question={q} ordinal={i + 1} />
+            ))}
+          </div>
+        )}
+
+        {/* 6. References footer */}
         {message.references && message.references.length > 0 && (
           <div className="mt-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
             <span>引用：</span>
