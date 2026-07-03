@@ -2,6 +2,7 @@
 
 from .lightrag_client import LightRAGClient
 from .llm_client import LLMClient
+from .query_service import QueryService
 from .search_client import SearchClient
 from .quiz_service import QuizService
 
