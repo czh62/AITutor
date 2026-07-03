@@ -27,11 +27,12 @@ import type {
   DeleteDocumentsResult,
   GraphData,
   QueryRequest,
-  ReferenceItem
+  ReferenceItem,
+  LoopEvent
 } from './types'
 
 // ---- mock 数据与状态（仅 VITE_USE_MOCK=true 时使用） ----
-import { mockDocuments, countByStatus, nextMockId, mockGraphData, mockGraphLabels, mockQueryAnswer } from './mockData'
+import { mockDocuments, countByStatus, nextMockId, mockGraphData, mockGraphLabels, mockQueryAnswer, mockSearchResults } from './mockData'
 let mockStore: DocStatusResponse[] = [...mockDocuments]
 let mockPipelineActive = false
 let mockCancellationRequested = false
@@ -529,12 +530,13 @@ export async function queryStream(
     onChunk: (text: string) => void
     onReferences?: (refs: ReferenceItem[]) => void
     onError?: (msg: string) => void
+    onLoopEvent?: (event: LoopEvent) => void
     signal?: AbortSignal
   }
 ): Promise<void> {
-  const { onChunk, onReferences, onError, signal } = callbacks
+  const { onChunk, onReferences, onError, onLoopEvent, signal } = callbacks
   if (USE_MOCK) {
-    return queryStreamMock(request, { onChunk, onReferences, onError, signal })
+    return queryStreamMock(request, { onChunk, onReferences, onError, onLoopEvent, signal })
   }
   try {
     const resp = await fetch(`${backendBaseUrl}/query/stream`, {
@@ -564,11 +566,37 @@ export async function queryStream(
         if (!trimmed) continue
         try {
           const parsed = JSON.parse(trimmed)
-          if (typeof parsed.response === 'string') {
+          // AgentLoop 事件路由
+          const eventType = parsed.type as string | undefined
+
+          if (eventType === 'content') {
+            // 最终回答 chunk（同现有 onChunk）
+            if (typeof parsed.content === 'string') {
+              onChunk(parsed.content)
+            }
+          } else if (eventType === 'references' && Array.isArray(parsed.references)) {
+            // 引用来源
+            onReferences?.(parsed.references as ReferenceItem[])
+          } else if (eventType === 'error') {
+            onError?.(parsed.content || parsed.error || '查询失败')
+          } else if (eventType === 'done') {
+            // 流结束，无需处理
+          } else if (eventType && onLoopEvent) {
+            // 其他 AgentLoop 事件（thinking, observation, progress, query_rewrite, result, stage_start）
+            onLoopEvent({
+              type: eventType as LoopEvent['type'],
+              round: parsed.round ?? 0,
+              content: parsed.content ?? '',
+              metadata: parsed.metadata ?? {},
+            })
+          } else if (typeof parsed.response === 'string') {
+            // 兼容旧格式（非 AgentLoop 的 LightRAG NDJSON）
             onChunk(parsed.response)
           } else if (Array.isArray(parsed.references)) {
+            // 兼容旧格式
             onReferences?.(parsed.references as ReferenceItem[])
           } else if (parsed.error) {
+            // 兼容旧格式
             onError?.(parsed.error)
           }
         } catch {
@@ -589,13 +617,62 @@ async function queryStreamMock(
     onChunk: (text: string) => void
     onReferences?: (refs: ReferenceItem[]) => void
     onError?: (msg: string) => void
+    onLoopEvent?: (event: LoopEvent) => void
     signal?: AbortSignal
   }
 ): Promise<void> {
-  const { onChunk, onReferences, signal } = callbacks
+  const { onChunk, onReferences, onLoopEvent, signal } = callbacks
   const { chunks, references } = mockQueryAnswer(request.query, request.mode)
-  // 首行先发引用，再逐段输出正文
-  onReferences?.(references)
+
+  // 先发 AgentLoop 思维链 mock events（带 call_id/call_kind/call_role 门控标记）
+  if (onLoopEvent) {
+    // stage_start
+    onLoopEvent({ type: 'stage_start', round: 0, content: '', metadata: { original_query: request.query, mode: request.mode, max_rounds: 3, call_id: 'loop_start', call_kind: 'agent_loop' } })
+    await delay(200)
+    if (signal?.aborted) return
+
+    // Round 0: observation (检索)
+    onLoopEvent({ type: 'observation', round: 0, content: '检索到 2 个相关段落（mock）...', metadata: { query: request.query, call_id: 'agent_loop_round_0', call_kind: 'agent_loop_round', call_role: 'retrieve' } })
+    await delay(150)
+
+    // 联网搜索（如果勾选了 force_web_search）
+    if (request.force_web_search) {
+      onLoopEvent({ type: 'search', round: 0, content: `正在联网搜索「${request.query}」...`, metadata: { query: request.query, provider: 'duckduckgo', status: 'searching', call_id: 'search_round_0', call_kind: 'web_search' } })
+      await delay(500)
+      onLoopEvent({ type: 'search', round: 0, content: '找到 3 条网络结果', metadata: { query: request.query, provider: 'duckduckgo', status: 'complete', results: mockSearchResults, call_id: 'search_round_0', call_kind: 'web_search' } })
+      await delay(200)
+    }
+
+    onReferences?.(references)
+    await delay(100)
+
+    // Round 0: thinking (insufficient) — 评估LLM调用
+    onLoopEvent({ type: 'thinking', round: 0, content: 'Mock: 上下文不够完整，需要补充细节', metadata: { quality: 'insufficient', need_web_search: request.force_web_search, call_id: 'eval_round_0', call_kind: 'llm_evaluation', call_role: 'thought' } })
+    await delay(100)
+    onLoopEvent({ type: 'progress', round: 0, content: '上下文不充分', metadata: { quality: 'insufficient', rewritten_query: `${request.query} 的详细解释`, missing_aspects: ['细节'], need_web_search: request.force_web_search, call_id: 'agent_loop_round_0', call_kind: 'agent_loop_round', call_role: 'narration' } })
+    await delay(200)
+
+    // Round 1: query_rewrite
+    onLoopEvent({ type: 'query_rewrite', round: 1, content: `${request.query} 的详细解释`, metadata: { original_query: request.query, call_id: 'agent_loop_round_0', call_kind: 'agent_loop_round', call_role: 'narration' } })
+    await delay(150)
+
+    // Round 1: observation (检索)
+    onLoopEvent({ type: 'observation', round: 1, content: '检索到 4 个相关段落（mock）...', metadata: { query: `${request.query} 的详细解释`, call_id: 'agent_loop_round_1', call_kind: 'agent_loop_round', call_role: 'retrieve' } })
+    await delay(100)
+
+    // Round 1: thinking (sufficient) — 评估LLM调用
+    onLoopEvent({ type: 'thinking', round: 1, content: 'Mock: 上下文已充分覆盖核心概念', metadata: { quality: 'sufficient', call_id: 'eval_round_1', call_kind: 'llm_evaluation', call_role: 'thought' } })
+    await delay(100)
+    onLoopEvent({ type: 'progress', round: 1, content: '上下文充分', metadata: { quality: 'sufficient', call_id: 'agent_loop_round_1', call_kind: 'agent_loop_round', call_role: 'finish' } })
+
+    // result
+    onLoopEvent({ type: 'result', round: 0, content: '', metadata: { rounds: 2, completed: true, engine: 'agent_loop', call_id: 'loop_summary' } })
+  } else {
+    // 无 onLoopEvent 时走旧格式
+    onReferences?.(references)
+  }
+
+  // 最终回答 chunks — call_kind="llm_final_response" + call_role="finish"
   for (const chunk of chunks) {
     if (signal?.aborted) return
     onChunk(chunk)

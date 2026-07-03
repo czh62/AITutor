@@ -302,6 +302,22 @@ class LightRAGClient:
         except httpx.HTTPError as exc:
             self._handle_error(exc)
 
+    async def query_context(self, body: dict) -> dict:
+        """POST /query — only_need_context=True，只返回检索到的上下文，不生成回答。
+
+        AgentLoop 在每轮检索时调用此方法获取原始知识库内容。
+        """
+        body = dict(body)  # 不修改传入的 dict
+        body["only_need_context"] = True
+        body["stream"] = False
+        body["include_references"] = True
+        try:
+            resp = await self._get_client().post("/query", json=body)
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as exc:
+            self._handle_error(exc)
+
     async def query_stream(self, body: dict):
         """POST /query/stream — NDJSON 流式查询，逐行 yield（每行含尾部换行）。
 

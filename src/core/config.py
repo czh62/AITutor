@@ -35,6 +35,22 @@ class Settings(BaseSettings):
     lightrag_base_url: str = "http://localhost:9621"
     lightrag_timeout: float = 300.0
 
+    # LLM（与 LightRAG 共用 .env 配置，用于 AgentLoop 查询评估/改写）
+    llm_binding: str = "openai"
+    llm_binding_host: str = ""
+    llm_binding_api_key: str = ""
+    llm_model: str = ""
+    llm_api_version: str = ""
+
+    # AgentLoop
+    agent_loop_max_rounds: int = 3
+    agent_loop_temperature: float = 0.3
+    agent_loop_max_tokens: int = 4096
+
+    # 联网搜索（DuckDuckGo 零配置，无需 API key）
+    search_enabled: bool = True
+    search_max_results: int = 5
+
 
 @lru_cache
 def get_settings() -> Settings:

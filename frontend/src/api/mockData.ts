@@ -204,6 +204,12 @@ export const mockGraphData: GraphData = {
  * mock 流式问答回答：返回分段 chunks（模拟流式逐段输出）+ 引用来源。
  * 真实环境下由 LightRAG POST /query/stream 返回 NDJSON。
  */
+export const mockSearchResults: { title: string; url: string; snippet: string }[] = [
+  { title: '深度学习最新进展 - AI Research', url: 'https://arxiv.org/abs/2024.xxxxx', snippet: '本文综述了2024年深度学习领域的最新技术突破和应用趋势...' },
+  { title: '机器学习入门教程 - Coursera', url: 'https://www.coursera.org/learn/machine-learning', snippet: 'Andrew Ng 经典机器学习课程，涵盖从基础概念到实践应用...' },
+  { title: 'Transformer架构详解 - Wikipedia', url: 'https://en.wikipedia.org/wiki/Transformer_(model)', snippet: 'Transformer 是一种基于自注意力机制的深度学习模型架构...' },
+]
+
 export function mockQueryAnswer(query: string, mode: string): {
   chunks: string[]
   references: ReferenceItem[]

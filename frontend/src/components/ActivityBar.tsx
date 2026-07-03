@@ -9,28 +9,30 @@ interface ActivityBarProps {
 }
 
 /**
- * 最左侧活动栏（IDE 风格）：垂直图标菜单，点击切换左侧边栏功能。
- * 当前仅"文档管理"一项，预留扩展位（见下方注释）。
+ * 最左侧活动栏（IDE 风格，对齐 DeepTutor 折叠态侧栏）：
+ * bg-secondary 暖底 + 文档管理图标按钮。
+ * 按钮 rounded-xl，激活态 bg-accent + shadow-sm（DeepT 导航图标按钮风格），
+ * 过渡 transition-all duration-150（DeepT 全项目无 active:scale，仅靠背景色变化反馈）。
  */
 export default function ActivityBar({ sidebarOpen, onToggleSidebar }: ActivityBarProps) {
   return (
     <TooltipProvider delayDuration={300}>
-      <aside className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border/40 bg-card/95 py-2">
+      <aside className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border/40 bg-secondary py-3">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               onClick={onToggleSidebar}
               className={cn(
-                'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                'flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-150',
                 sidebarOpen
-                  ? 'bg-emerald-400/15 text-emerald-600'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  ? 'bg-accent text-foreground shadow-sm'
+                  : 'text-foreground/85 hover:bg-background/60 hover:text-foreground'
               )}
               aria-label="文档管理"
               aria-pressed={sidebarOpen}
             >
-              <FileTextIcon className="h-4 w-4" />
+              <FileTextIcon className="h-[18px] w-[18px]" strokeWidth={sidebarOpen ? 2 : 1.6} />
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">{sidebarOpen ? '收起侧边栏' : '文档管理'}</TooltipContent>

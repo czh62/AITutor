@@ -16,7 +16,6 @@ import LayoutsControl from '@/components/graph/LayoutsControl'
 import GraphControl from '@/components/graph/GraphControl'
 import ZoomControl from '@/components/graph/ZoomControl'
 import FullScreenControl from '@/components/graph/FullScreenControl'
-import Settings from '@/components/graph/Settings'
 import GraphSearch, { type GraphSearchOption, type OptionItem } from '@/components/graph/GraphSearch'
 import GraphLabels from '@/components/graph/GraphLabels'
 import PropertiesView from '@/components/graph/PropertiesView'
@@ -210,7 +209,6 @@ const GraphViewer = () => {
           <ZoomControl />
           <FullScreenControl />
           <LegendButton />
-          <Settings />
         </div>
 
         {showPropertyPanel && (

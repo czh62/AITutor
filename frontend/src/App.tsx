@@ -42,7 +42,7 @@ export default function App() {
               <aside
                 style={{ width: sidebarOpen ? leftWidth : 0 }}
                 className={cn(
-                  'flex min-h-0 shrink-0 flex-col overflow-hidden',
+                  'flex min-h-0 shrink-0 flex-col overflow-hidden bg-secondary',
                   sidebarOpen && 'border-r border-border/40'
                 )}
               >
@@ -51,7 +51,7 @@ export default function App() {
               {sidebarOpen && (
                 <div
                   {...resizerProps}
-                  className="w-1 shrink-0 cursor-col-resize bg-border/40 transition-colors hover:bg-emerald-500/60"
+                  className="w-1 shrink-0 cursor-col-resize bg-border/40 transition-colors hover:bg-muted-foreground/40"
                   aria-label="拖动调整宽度"
                   role="separator"
                 />

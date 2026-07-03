@@ -19,8 +19,8 @@ from .core.config import get_settings
 from .core.exceptions import AppException
 from .core.logging import get_logger, setup_logging
 from .core.middleware import RequestIdMiddleware, RequestLoggingMiddleware
-from .db.session import init_db
-from .services import create_lightrag_client
+from .db.session import init_db, reset_database
+from .services import create_lightrag_client, create_llm_client, create_search_client
 
 setup_logging()
 logger = get_logger("aitutor.main")
@@ -28,19 +28,36 @@ logger = get_logger("aitutor.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时建表并创建 LightRAGClient；shutdown 时关闭客户端。"""
+    """启动时重置数据库（清空旧数据文件）再建表，然后创建 LightRAGClient；shutdown 时关闭客户端。"""
+    logger.info("resetting database (drop existing data file)")
+    reset_database()
     logger.info("initializing database (create tables if missing)")
     init_db()
 
-    # 创建 LightRAGClient 并存到 app.state，供路由层依赖注入
-    client = create_lightrag_client()
-    app.state.lightrag_client = client
-    logger.info("lightrag client created, base_url=%s", client._base_url)
+    # 创建 LightRAGClient 和 LLMClient，存到 app.state，供路由层依赖注入
+    lightrag_client = create_lightrag_client()
+    app.state.lightrag_client = lightrag_client
+    logger.info("lightrag client created, base_url=%s", lightrag_client._base_url)
+
+    llm_client = create_llm_client()
+    app.state.llm_client = llm_client
+    logger.info("LLM client created, model=%s, base_url=%s", llm_client._model, llm_client._base_url)
+
+    # 创建 SearchClient（联网搜索），存到 app.state
+    search_client = create_search_client()
+    app.state.search_client = search_client
+    if search_client:
+        logger.info("search client created, provider=duckduckgo, max_results=%d", search_client.max_results)
+    else:
+        logger.info("search client disabled (search_enabled=False)")
 
     logger.info("application startup complete")
     yield
 
-    await client.close()
+    await lightrag_client.close()
+    await llm_client.close()
+    if search_client:
+        await search_client.close()
     logger.info("application shutdown")
 
 

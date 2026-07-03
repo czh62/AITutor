@@ -18,6 +18,7 @@ class QueryRequest(BaseModel):
 
     mode 取值：naive / local / global / hybrid / mix / bypass，默认 mix。
     conversation_history 预留（当前遵循 history_turns=0，不传多轮上下文）。
+    force_web_search 用于用户手动勾选联网搜索时传入。
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -25,6 +26,7 @@ class QueryRequest(BaseModel):
     query: str
     mode: Literal["naive", "local", "global", "hybrid", "mix", "bypass"] = "mix"
     stream: bool = True
+    force_web_search: bool = False
     conversation_history: Optional[List[Dict[str, Any]]] = None
 
 
@@ -39,9 +41,45 @@ class ReferenceItem(BaseModel):
 
 
 class QueryResponse(BaseModel):
-    """非流式查询响应（对齐 LightRAG POST /query 返回）。"""
+    """非流式查询响应（对齐 LightRAG POST /query 返回）。
+
+    loop_trace 字段包含 AgentLoop 思维链追踪（非流式端点收集后返回）。
+    """
 
     model_config = ConfigDict(extra="ignore")
 
     response: str = ""
     references: Optional[List[ReferenceItem]] = None
+    loop_trace: Optional[LoopTrace] = None
+
+
+# ------------------------------------------------------------------
+#  AgentLoop 思维链追踪
+# ------------------------------------------------------------------
+
+class LoopStep(BaseModel):
+    """AgentLoop 单轮步骤。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    round: int
+    query: str                    # 本轮使用的查询（可能是改写后的）
+    original_query: str           # 原始用户查询
+    thinking: str                 # 评估思考内容
+    quality: str                  # "sufficient" / "insufficient" / "forced" / "short_query"
+    rewritten_query: Optional[str] = None  # 如果 insufficient，建议的改写查询
+    context_summary: str          # 本轮检索到的上下文摘要
+    need_web_search: Optional[bool] = None  # LLM 评估是否需要联网搜索
+    web_search_query: Optional[str] = None  # 联网搜索使用的查询
+    web_search_results: Optional[List[Dict[str, str]]] = None  # 搜索结果摘要列表
+
+
+class LoopTrace(BaseModel):
+    """AgentLoop 思维链追踪（每轮的查询改写和评估结果）。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    rounds: int
+    steps: List[LoopStep] = []
+    completed: bool = False
+    engine: str = "agent_loop"

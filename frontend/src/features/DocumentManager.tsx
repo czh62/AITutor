@@ -1,15 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import Button from '@/components/ui/Button'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/Table'
-import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import EmptyCard from '@/components/ui/EmptyCard'
 import Checkbox from '@/components/ui/Checkbox'
 import UploadDocumentsDialog from '@/components/documents/UploadDocumentsDialog'
@@ -33,7 +24,7 @@ import {
   CheckSquareIcon,
   XIcon,
   AlertTriangle,
-  Info,
+
   MoreHorizontalIcon,
   Trash2Icon,
   ChevronLeftIcon
@@ -82,29 +73,23 @@ const formatDocumentDetails = (doc: DocStatusResponse): string => {
   return lines.join('\n\n')
 }
 
-function DocumentStatusDetailsDialog({ doc }: { doc: DocStatusResponse }) {
+function DocumentStatusPopover({ doc }: { doc: DocStatusResponse }) {
   const details = formatDocumentDetails(doc)
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="ml-1 inline-flex size-5 items-center justify-center rounded hover:bg-accent"
-            aria-label="查看详情"
-          >
-            {doc.error_msg ? (
-              <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
-            ) : (
-              <Info className="h-3.5 w-3.5 text-blue-500" />
-            )}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-md whitespace-pre-wrap break-words">
-          {details}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="ml-1 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
+          aria-label="查看详情"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="max-w-md whitespace-pre-wrap break-words p-3 text-xs text-foreground">
+        {details}
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -261,44 +246,50 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
   const processCount = statusCounts.processing ?? 0
   const failedCount = statusCounts.failed ?? 0
 
+  // 状态过滤按钮（对齐 DeepT 导航项风格：rounded-lg + hover/active 背景过渡）
   const filterBtn = useMemo(
-    () => (
+    () =>
       (filter: StatusFilter, label: string, count: number, colorClass: string) => (
-        <Button
-          size="sm"
-          variant={statusFilter === filter ? 'secondary' : 'outline'}
+        <button
+          type="button"
           onClick={() => handleStatusFilterChange(filter)}
           disabled={isRefreshing}
           className={cn(
-            'h-7 px-2 text-xs',
-            count > 0 ? colorClass : 'text-gray-500',
-            statusFilter === filter && 'font-medium shadow-sm border'
+            'inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs transition-colors disabled:opacity-50',
+            statusFilter === filter
+              ? 'bg-background/60 font-medium text-foreground'
+              : 'text-muted-foreground hover:bg-background/40 hover:text-foreground'
           )}
         >
-          {label} ({count})
-        </Button>
-      )
-    ),
+          <span>{label}</span>
+          <span className={count > 0 ? colorClass : 'text-muted-foreground/60'}>{count}</span>
+        </button>
+      ),
     [statusFilter, isRefreshing]
   )
 
-  // 「更多」菜单项
-  const moreMenuItem = (onClick: () => void, icon: React.ReactNode, label: string) => (
+  // 「更多」菜单项（对齐 DeepT 行样式：rounded-lg + hover 背景）
+  const moreMenuItem = (onClick: () => void, icon: ReactNode, label: string) => (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-foreground/85 transition-colors hover:bg-background/60 hover:text-foreground"
     >
       {icon}
       {label}
     </button>
   )
 
+  // 工具栏图标按钮统一样式（对齐 DeepT 折叠态导航图标按钮：
+  // h-9 w-9 rounded-xl，hover:bg-background/60，transition-all duration-150，无 active:scale）
+  const iconBtnClass =
+    'flex h-9 w-9 items-center justify-center rounded-xl text-foreground/85 transition-all duration-150 hover:bg-background/60 hover:text-foreground disabled:opacity-50'
+
   return (
-    <Card className="!rounded-none flex h-full min-h-0 flex-col overflow-hidden">
-      <CardHeader className="flex-none px-3 py-2">
-        {/* 顶部工具栏：上传 / 刷新 / 更多（选择模式：删除 / 全选） */}
-        <div className="flex items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col">
+      {/* 顶部工具栏 + 状态过滤行 */}
+      <div className="flex-none px-3 pb-2 pt-3">
+        <div className="flex items-center gap-1">
           <UploadDocumentsDialog
             onUploadBatchAccepted={() => {
               setPipelineActive(true)
@@ -308,15 +299,16 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
               fetchDocuments()
             }}
           />
-          <Button
-            variant="outline"
-            size="sm"
+          <button
+            type="button"
             onClick={fetchDocuments}
             disabled={isRefreshing}
-            tooltip="刷新文档列表"
+            aria-label="刷新文档列表"
+            title="刷新文档列表"
+            className={iconBtnClass}
           >
-            <RotateCcwIcon className="h-4 w-4" />
-          </Button>
+            <RotateCcwIcon className="h-[18px] w-[18px]" strokeWidth={1.6} />
+          </button>
 
           <div className="flex-1" />
 
@@ -327,43 +319,58 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
             />
           )}
           {isSelectionMode && (
-            <Button variant="outline" size="sm" onClick={handleSelectCurrentPage} className="h-9">
+            <button
+              type="button"
+              onClick={handleSelectCurrentPage}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-foreground/85 transition-colors hover:bg-background/60 hover:text-foreground"
+            >
               {selectedDocIds.length === docs.length ? (
                 <>
-                  <XIcon className="h-4 w-4" /> 取消({docs.length})
+                  <XIcon className="h-4 w-4" strokeWidth={1.6} /> 取消({docs.length})
                 </>
               ) : (
                 <>
-                  <CheckSquareIcon className="h-4 w-4" /> 全选({docs.length})
+                  <CheckSquareIcon className="h-4 w-4" strokeWidth={1.6} /> 全选({docs.length})
                 </>
               )}
-            </Button>
+            </button>
           )}
 
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" tooltip="更多操作" className="h-9">
-                <MoreHorizontalIcon className="h-4 w-4" />
-              </Button>
+              <button
+                type="button"
+                aria-label="更多操作"
+                title="更多操作"
+                className={iconBtnClass}
+              >
+                <MoreHorizontalIcon className="h-[18px] w-[18px]" strokeWidth={1.6} />
+              </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-40 p-1">
-              {moreMenuItem(handleScan, <RefreshCwIcon className="h-4 w-4" />, '扫描/重试')}
+              {moreMenuItem(handleScan, <RefreshCwIcon className="h-4 w-4" strokeWidth={1.6} />, '扫描/重试')}
               {moreMenuItem(
                 () => setShowPipelineStatus(true),
-                <ActivityIcon className="h-4 w-4" />,
+                <ActivityIcon className="h-4 w-4" strokeWidth={1.6} />,
                 '流水线状态'
               )}
               {moreMenuItem(
                 () => setShowClearDialog(true),
-                <Trash2Icon className="h-4 w-4" />,
+                <Trash2Icon className="h-4 w-4" strokeWidth={1.6} />,
                 '清空文档'
               )}
             </PopoverContent>
           </Popover>
           {onCollapse && (
-            <Button variant="ghost" size="sm" onClick={onCollapse} tooltip="收起侧边栏" aria-label="收起侧边栏" className="h-9">
-              <ChevronLeftIcon className="h-4 w-4" />
-            </Button>
+            <button
+              type="button"
+              onClick={onCollapse}
+              aria-label="收起侧边栏"
+              title="收起侧边栏"
+              className={iconBtnClass}
+            >
+              <ChevronLeftIcon className="h-[18px] w-[18px]" strokeWidth={1.6} />
+            </button>
           )}
         </div>
 
@@ -376,86 +383,81 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
           {filterBtn('process', '处理', processCount, 'text-blue-600')}
           {filterBtn('failed', '失败', failedCount, 'text-red-600')}
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="relative min-h-0 flex-1 p-0">
-        {!hasAny && (
-          <div className="absolute inset-0 p-0">
-            <EmptyCard title="无文档" description="还没有上传任何文档" />
-          </div>
-        )}
-        {hasAny && (
-          <div className="absolute inset-0 flex min-h-0 flex-col">
-            <div className="absolute inset-[-1px] flex flex-col overflow-hidden rounded-md border">
-              <TooltipProvider>
-                <Table className="w-full">
-                  <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
-                    <TableRow className="border-b bg-card/95 backdrop-blur">
-                      <TableHead
-                        onClick={() => handleSort('id')}
-                        className="cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-800"
-                      >
-                        <div className="flex items-center">
-                          文件名
-                          {sortField === 'file_path' && (
-                            <span className="ml-1">
-                              {sortDirection === 'asc' ? (
-                                <ArrowUpIcon size={14} />
-                              ) : (
-                                <ArrowDownIcon size={14} />
-                              )}
-                            </span>
-                          )}
-                        </div>
-                      </TableHead>
-                      <TableHead className="w-28">状态</TableHead>
-                      <TableHead className="w-12 text-center">选</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody className="text-sm">
-                    {docs.map((doc) => {
-                      const status = doc.status as DocStatus
-                      return (
-                        <TableRow key={doc.id}>
-                          <TableCell className="max-w-0 truncate font-mono">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="truncate">{getDisplayFileName(doc)}</div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-2xl">
-                                {doc.file_path}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center">
-                              <span className={cn('truncate', STATUS_COLORS[status])}>
-                                {STATUS_LABELS[status]}
-                              </span>
-                              {hasDocumentDetails(doc) && (
-                                <DocumentStatusDetailsDialog doc={doc} />
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Checkbox
-                              checked={selectedDocIds.includes(doc.id)}
-                              onCheckedChange={(c) =>
-                                handleDocumentSelect(doc.id, c === true)
-                              }
-                              className="mx-auto"
-                            />
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </TooltipProvider>
+      {/* 文档列表：表头 + 行列表 */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {!hasAny ? (
+          <EmptyCard title="无文档" description="还没有上传任何文档" className="m-2 rounded-lg" />
+        ) : (
+          <TooltipProvider>
+            {/* 表头 + 行列表共享同一 padding/gap/列宽，确保对齐 */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 pt-1">
+              {/* 表头：三列（文件名 flex-1 / 状态+详情 w-20 / 勾选 w-6），与行完全同结构 */}
+              <div className="flex items-center gap-2 px-2.5 pb-1 text-[11px] font-medium uppercase tracking-widest text-muted-foreground/60">
+                <button
+                  type="button"
+                  onClick={() => handleSort('id')}
+                  disabled={isRefreshing}
+                  className="flex min-w-0 flex-1 items-center gap-1 cursor-pointer select-none transition-colors hover:text-foreground disabled:opacity-50"
+                  title="切换文件名排序"
+                >
+                  <span>文件名</span>
+                  {sortField === 'file_path' && (
+                    sortDirection === 'asc'
+                      ? <ArrowUpIcon className="h-3 w-3" strokeWidth={2} />
+                      : <ArrowDownIcon className="h-3 w-3" strokeWidth={2} />
+                  )}
+                </button>
+                <div className="w-20 shrink-0">状态</div>
+                <div className="w-6 shrink-0 text-center">选</div>
+              </div>
+              {/* 行列表 */}
+              {docs.map((doc) => {
+                const status = doc.status as DocStatus
+                const selected = selectedDocIds.includes(doc.id)
+                return (
+                  <div
+                    key={doc.id}
+                    className={cn(
+                      'group/doc flex items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors',
+                      selected
+                        ? 'bg-background/60 font-medium'
+                        : 'hover:bg-background/40'
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="truncate font-mono text-[13px] text-foreground/90">
+                            {getDisplayFileName(doc)}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-2xl">
+                          {doc.file_path}
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    {/* 状态 + 详情按钮合并为一个 flex 子项，与表头 w-20 列对齐 */}
+                    <div className="w-20 shrink-0 flex items-center gap-1">
+                      <span className={cn('truncate text-xs', STATUS_COLORS[status])}>
+                        {STATUS_LABELS[status]}
+                      </span>
+                      {doc.error_msg && <DocumentStatusPopover doc={doc} />}
+                    </div>
+                    <div className="w-6 shrink-0 flex justify-center">
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={(c) => handleDocumentSelect(doc.id, c === true)}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          </div>
+          </TooltipProvider>
         )}
-      </CardContent>
+      </div>
 
       {/* 底部分页栏 */}
       {pagination.total_pages > 1 && (
@@ -480,6 +482,6 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
         onOpenChange={setShowClearDialog}
         onDocumentsCleared={handleDocumentsCleared}
       />
-    </Card>
+    </div>
   )
 }

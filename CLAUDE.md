@@ -69,7 +69,7 @@ uvicorn backend.main:app --reload --port 8000
 - `services/lightrag_client.py` — `LightRAGClient`（httpx.AsyncClient，懒创建，lifespan 时存入 `app.state.lightrag_client`，shutdown 时 `close()`）。**所有方法返回原始 dict**，schema 解析在 router 层。
 - `schemas/documents.py`、`schemas/graph.py`（`GraphNode`/`GraphEdge`/`GraphData`）— pydantic 模型，全部 `ConfigDict(extra="ignore")`（容忍 LightRAG 返回未知字段），与前端 `types.ts` 一一对应。
 - `core/config.py` — `Settings(BaseSettings)` 用 pydantic-settings 从 `.env` 读，`get_settings()` 经 `lru_cache` 单例。`core/exceptions.py` 异常体系，`core/middleware.py` 请求 ID + 日志中间件。
-- `db/session.py` — SQLAlchemy engine/会话，**当前无业务模型**，`init_db()` 仅建空表，预留迁移旧 `backend/` 模型。
+- `db/session.py` — SQLAlchemy engine/会话，**当前无业务模型**。`main.py` 的 lifespan **每次启动先 `reset_database()`（删整个 `.db` 文件 + `-wal`/`-shm`）再 `init_db()`**：因 Base 无模型，`init_db()` 仍为 no-op，故每次重启都得到**完全空库**——现有残留表（含孤儿表 `document_records`）会消失，将来 `src` 写入的业务数据每次重启都会被清空。`reset_database()` 仅对 SQLite 生效（非 SQLite 跳过）。预留迁移旧 `backend/` 模型后，`init_db()` 的 `create_all` 才会真正建表。
 
 **异常转换**：`LightRAGClient._handle_error` 把 httpx 错误映射为 `AppException` 子类——`ConnectError`/`TimeoutException`/`HTTPStatusError(非404非409)` → `ServiceUnavailableError`(502)，404 → `NotFoundError`，409 → `ConflictError`。`main.py` 注册全局 handler 统一返回 `{detail, code}`，不向客户端泄露内部错误。新增需走下游的路由时沿用此模式，不要在 endpoint 里写 try/except + HTTPException。
 

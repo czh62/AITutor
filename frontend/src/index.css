@@ -3,49 +3,54 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Cream 暖白主题（仿 DeepTutor 主页）：背景近白带暖色，温度仅体现在填充块与强调处。
+ * 强调色仍用 emerald（AI Tutor 品牌色），不走 --primary 变量；--primary/--ring 保留近黑/前景色，
+ * 保证 Button default 变体与 focus ring 不受主题切换影响。
+ */
 :root {
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(240 10% 3.9%);
-  --card: hsl(0 0% 100%);
-  --card-foreground: hsl(240 10% 3.9%);
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(240 10% 3.9%);
-  --primary: hsl(240 5.9% 10%);
-  --primary-foreground: hsl(0 0% 98%);
-  --secondary: hsl(240 4.8% 95.9%);
-  --secondary-foreground: hsl(240 5.9% 10%);
-  --muted: hsl(240 4.8% 95.9%);
-  --muted-foreground: hsl(240 3.8% 46.1%);
-  --accent: hsl(240 4.8% 95.9%);
-  --accent-foreground: hsl(240 5.9% 10%);
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 5.9% 90%);
-  --input: hsl(240 5.9% 90%);
-  --ring: hsl(240 10% 3.9%);
+  --background: #fdfcf9;
+  --foreground: #1c1816;
+  --card: #ffffff;
+  --card-foreground: #1c1816;
+  --popover: #ffffff;
+  --popover-foreground: #1c1816;
+  --primary: #1c1816;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f2ea;
+  --secondary-foreground: #1c1816;
+  --muted: #f1ede2;
+  --muted-foreground: #6d645a;
+  --accent: #ece7d8;
+  --accent-foreground: #1c1816;
+  --destructive: #c53a2c;
+  --destructive-foreground: #ffffff;
+  --border: #e6decc;
+  --input: #e6decc;
+  --ring: #1c1816;
   --radius: 0.6rem;
 }
 
 .dark {
-  --background: hsl(240 10% 3.9%);
-  --foreground: hsl(0 0% 98%);
-  --card: hsl(240 10% 3.9%);
-  --card-foreground: hsl(0 0% 98%);
-  --popover: hsl(240 10% 3.9%);
-  --popover-foreground: hsl(0 0% 98%);
-  --primary: hsl(0 0% 98%);
-  --primary-foreground: hsl(240 5.9% 10%);
-  --secondary: hsl(240 3.7% 15.9%);
-  --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(240 3.7% 15.9%);
-  --muted-foreground: hsl(240 5% 64.9%);
-  --accent: hsl(240 3.7% 15.9%);
-  --accent-foreground: hsl(0 0% 98%);
-  --destructive: hsl(0 62.8% 30.6%);
-  --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 3.7% 15.9%);
-  --input: hsl(240 3.7% 15.9%);
-  --ring: hsl(240 4.9% 83.9%);
+  --background: #1a1918;
+  --foreground: #e8e4de;
+  --card: #242220;
+  --card-foreground: #e8e4de;
+  --popover: #242220;
+  --popover-foreground: #e8e4de;
+  --primary: #e8e4de;
+  --primary-foreground: #1a1918;
+  --secondary: #2a2725;
+  --secondary-foreground: #e8e4de;
+  --muted: #2a2725;
+  --muted-foreground: #9b9590;
+  --accent: #302d2a;
+  --accent-foreground: #e8e4de;
+  --destructive: #d44a3c;
+  --destructive-foreground: #ffffff;
+  --border: #3a3634;
+  --input: #3a3634;
+  --ring: #e8e4de;
 }
 
 @theme inline {
@@ -88,17 +93,32 @@
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: hsl(0 0% 80%);
+  background-color: #e6decc;
   border-radius: 5px;
 }
 ::-webkit-scrollbar-track {
-  background-color: hsl(0 0% 95%);
+  background-color: #f5f2ea;
 }
 .dark ::-webkit-scrollbar-thumb {
-  background-color: hsl(0 0% 90%);
+  background-color: #3a3634;
 }
 .dark ::-webkit-scrollbar-track {
-  background-color: hsl(0 0% 0%);
+  background-color: #1a1918;
+}
+
+/* 空状态淡入（仿 DeepTutor animate-fade-in：opacity + translateY） */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.35s ease-out;
 }
 
 /* 流水线忙时的脉冲动画 */

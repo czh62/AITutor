@@ -170,11 +170,12 @@ export interface GraphData {
 /** 查询模式（对齐 LightRAG QueryParam.mode） */
 export type QueryMode = 'naive' | 'local' | 'global' | 'hybrid' | 'mix' | 'bypass'
 
-/** 查询请求（前端只发 query/mode/stream，其余参数由 LightRAG 服务端默认） */
+/** 查询请求（前端只发 query/mode/stream/force_web_search） */
 export interface QueryRequest {
   query: string
   mode: QueryMode
   stream?: boolean
+  force_web_search?: boolean  // 用户手动勾选联网搜索
 }
 
 /** RAG 引用来源项（对齐后端 ReferenceItem） */
@@ -182,6 +183,14 @@ export interface ReferenceItem {
   reference_id?: string
   file_path?: string
   content?: unknown[]
+}
+
+/** 联网搜索引用项 */
+export interface SearchCitation {
+  id: number
+  url: string
+  title: string
+  snippet: string
 }
 
 /** 对话消息（QAPanel 渲染用） */
@@ -192,7 +201,51 @@ export interface ChatMessage {
   references?: ReferenceItem[]
   isError?: boolean
   isStreaming?: boolean
+  // 原始事件流，供 TracePanels 按call_id分组渲染思维链
+  traceEvents?: StreamEvent[]
+  // 旧格式，向后兼容保留（有traceEvents时优先使用traceEvents）
+  loopTrace?: LoopTrace
 }
+
+/** AgentLoop 思维链追踪 */
+export interface LoopTrace {
+  rounds: number
+  completed: boolean
+  engine: string
+  steps: LoopStep[]
+}
+
+/** AgentLoop 单轮步骤 */
+export interface LoopStep {
+  round: number
+  query: string                // 本轮使用的查询（可能是改写后的）
+  originalQuery: string        // 原始用户查询
+  thinking: string             // 评估思考
+  quality: string              // sufficient / insufficient / forced / short_query
+  rewrittenQuery?: string      // 如果 insufficient，建议的改写查询
+  contextSummary: string       // 本轮检索到的上下文摘要
+  needWebSearch?: boolean      // LLM 评估是否需要联网搜索
+  webSearchQuery?: string      // 联网搜索使用的查询
+  webSearchResults?: SearchCitation[]  // 联网搜索结果摘要
+}
+
+/** AgentLoop NDJSON 流式事件类型 */
+export type LoopEventType =
+  | 'stage_start' | 'thinking' | 'query_rewrite'
+  | 'observation' | 'progress' | 'content'
+  | 'references' | 'search' | 'result' | 'error' | 'done'
+
+/** AgentLoop NDJSON 流式事件（对齐后端 StreamEvent） */
+export interface StreamEvent {
+  type: LoopEventType
+  round: number
+  content: string
+  metadata: Record<string, unknown>  // 包含 call_id, call_kind, call_role 等门控标记
+  timestamp?: number                 // 可选时间戳（后端未提供时由前端补充）
+}
+
+/** 旧版事件类型别名，向后兼容 */
+export type LoopEvent = StreamEvent
 
 /** Query Mode 下拉选项（默认 mix） */
 export const QUERY_MODE_OPTIONS: { value: QueryMode; label: string }[] = [
