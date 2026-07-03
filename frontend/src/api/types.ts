@@ -170,12 +170,13 @@ export interface GraphData {
 /** 查询模式（对齐 LightRAG QueryParam.mode） */
 export type QueryMode = 'naive' | 'local' | 'global' | 'hybrid' | 'mix' | 'bypass'
 
-/** 查询请求（前端只发 query/mode/stream/force_web_search） */
+/** 查询请求（前端发 query/mode/stream/force_web_search/session_id） */
 export interface QueryRequest {
   query: string
   mode: QueryMode
   stream?: boolean
   force_web_search?: boolean  // 用户手动勾选联网搜索
+  session_id?: string         // ask_user 暂停恢复用会话标识
 }
 
 /** RAG 引用来源项（对齐后端 ReferenceItem） */
@@ -193,6 +194,44 @@ export interface SearchCitation {
   snippet: string
 }
 
+/** 工具来源项（对齐后端 SourceItem，区分 rag/web） */
+export interface SourceItem {
+  id: string
+  content: string
+  file_path: string
+  type: 'rag' | 'web'
+}
+
+/** ask_user 单个问题 */
+export interface AskUserQuestion {
+  id: string
+  text: string
+  options?: string[] | null  // null/undefined 表示纯文本输入
+}
+
+/** ask_user 完整载荷 */
+export interface AskUserPayload {
+  questions: AskUserQuestion[]
+  context: string
+}
+
+/** 工具调用信息（tool_call 事件） */
+export interface ToolCallInfo {
+  id: string
+  name: 'rag' | 'web_search' | 'ask_user' | string
+  arguments: Record<string, unknown>
+}
+
+/** 工具结果信息（tool_result 事件） */
+export interface ToolResultInfo {
+  tool_call_id: string
+  name: string
+  content: string
+  sources_count?: number
+  ask_user?: AskUserPayload  // ask_user 工具的结果带此字段
+  paused?: boolean
+}
+
 /** 对话消息（QAPanel 渲染用） */
 export interface ChatMessage {
   id: string
@@ -201,10 +240,13 @@ export interface ChatMessage {
   references?: ReferenceItem[]
   isError?: boolean
   isStreaming?: boolean
-  // 原始事件流，供 TracePanels 按call_id分组渲染思维链
+  // 原始事件流，供 TracePanels 按 call_id 分组渲染思维链
   traceEvents?: StreamEvent[]
-  // 旧格式，向后兼容保留（有traceEvents时优先使用traceEvents）
+  // 旧格式，向后兼容保留（有 traceEvents 时优先使用 traceEvents）
   loopTrace?: LoopTrace
+  // ask_user 暂停态：loop 等待用户回复
+  askUserPayload?: AskUserPayload
+  isWaitingForInput?: boolean
 }
 
 /** AgentLoop 思维链追踪 */
@@ -231,9 +273,11 @@ export interface LoopStep {
 
 /** AgentLoop NDJSON 流式事件类型 */
 export type LoopEventType =
-  | 'stage_start' | 'thinking' | 'query_rewrite'
+  | 'stage_start' | 'stage_end' | 'thinking' | 'query_rewrite'
   | 'observation' | 'progress' | 'content'
-  | 'references' | 'search' | 'result' | 'error' | 'done'
+  | 'tool_call' | 'tool_result'
+  | 'references' | 'search' | 'sources' | 'result'
+  | 'error' | 'wait_for_input' | 'session' | 'session_meta' | 'done'
 
 /** AgentLoop NDJSON 流式事件（对齐后端 StreamEvent） */
 export interface StreamEvent {

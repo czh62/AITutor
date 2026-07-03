@@ -41,3 +41,11 @@ def create_search_client() -> SearchClient | None:
     return SearchClient(
         max_results=settings.search_max_results,
     )
+
+
+def create_memory_manager(llm_client: LLMClient) -> "MemoryManager":
+    """创建记忆管理器（L1 追踪 + L2 摘要，SQLite 存储）。在 lifespan 启动时调用一次。"""
+    from ..agentloop.memory import MemoryManager
+    from ..db.session import SessionLocal
+
+    return MemoryManager(db=SessionLocal, llm=llm_client)

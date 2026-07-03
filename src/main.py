@@ -20,7 +20,12 @@ from .core.exceptions import AppException
 from .core.logging import get_logger, setup_logging
 from .core.middleware import RequestIdMiddleware, RequestLoggingMiddleware
 from .db.session import init_db, reset_database
-from .services import create_lightrag_client, create_llm_client, create_search_client
+from .services import (
+    create_lightrag_client,
+    create_llm_client,
+    create_memory_manager,
+    create_search_client,
+)
 
 setup_logging()
 logger = get_logger("aitutor.main")
@@ -50,6 +55,11 @@ async def lifespan(app: FastAPI):
         logger.info("search client created, provider=duckduckgo, max_results=%d", search_client.max_results)
     else:
         logger.info("search client disabled (search_enabled=False)")
+
+    # 创建 MemoryManager（记忆系统），存到 app.state
+    memory_manager = create_memory_manager(llm_client)
+    app.state.memory_manager = memory_manager
+    logger.info("memory manager created")
 
     logger.info("application startup complete")
     yield

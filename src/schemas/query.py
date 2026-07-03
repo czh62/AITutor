@@ -19,6 +19,7 @@ class QueryRequest(BaseModel):
     mode 取值：naive / local / global / hybrid / mix / bypass，默认 mix。
     conversation_history 预留（当前遵循 history_turns=0，不传多轮上下文）。
     force_web_search 用于用户手动勾选联网搜索时传入。
+    session_id 用于 ask_user 暂停恢复的会话标识（可选）。
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -27,7 +28,36 @@ class QueryRequest(BaseModel):
     mode: Literal["naive", "local", "global", "hybrid", "mix", "bypass"] = "mix"
     stream: bool = True
     force_web_search: bool = False
+    session_id: Optional[str] = None
     conversation_history: Optional[List[Dict[str, Any]]] = None
+
+
+class AskUserQuestionSchema(BaseModel):
+    """ask_user 单个问题。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    text: str
+    options: Optional[List[str]] = None
+
+
+class AskUserPayloadSchema(BaseModel):
+    """ask_user 完整载荷。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    questions: List[AskUserQuestionSchema]
+    context: str = ""
+
+
+class ResumeRequest(BaseModel):
+    """ask_user 恢复请求体。answers 是 question_id -> 用户回答。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    session_id: str
+    answers: Dict[str, str]
 
 
 class ReferenceItem(BaseModel):

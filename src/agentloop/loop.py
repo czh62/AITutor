@@ -1,620 +1,771 @@
-"""AgentLoop — 查询改写循环核心 + 联网搜索 + 短查询兜底。
+"""AgentLoop — tool-calling 循环核心。
 
-参考 DeepTutor 的 AgentLoop._run_loop()，大幅简化：
-- 无 tool calling、无 label protocol、无 WebSocket
-- 循环结构：retrieve → evaluate → (search if needed) → rewrite or finish → synthesize answer
-- 短查询（< 3字符）直接走 LLM 回答，不走 LightRAG 检索（避免 422）
-- 联网搜索双重触发：LLM 自动判断 need_web_search + 用户手动 force_web_search
-- 通过 async generator yield NDJSON StreamEvent lines
+完整移植 DeepTutor 的 AgentLoop._run_loop()（chat 能力版），机制：
+- 每轮只有一个 LLM call（带 tool schemas）
+- LLM 返回 tool_calls → 执行工具、追加结果、继续下一轮（narration）
+- LLM 不返回 tool_calls 且有文本 → 该文本即最终回答（finish）
+- LLM 不返回 tool_calls 且无文本 → 注入 nudge 继续下一轮
+- max_rounds 用尽仍只有 tool_calls → forced_finish（一次不带 tool 的 LLM call）
+- ask_user 触发 → 保存 context 到 DB、发射 wait_for_input、暂停 loop；resume_stream 恢复
 
-上下文 vs 展示门控（对齐 DeepTutor）：
-- 每个 StreamEvent 的 metadata 包含 call_id / call_kind / call_role 标记
-- call_kind 区分调用类型：agent_loop_round / rag_retrieval / web_search / llm_evaluation / llm_final_response
-- call_role 区分前端归属：retrieve / observe / thought / narration / finish
-- 前端根据这些标记决定：哪些内容出现在思维链 trace、哪些出现在回答气泡
+与旧版（retrieve→evaluate→rewrite→answer 两阶段）的本质区别：LLM 自主通过 tool 调用
+决定检索策略，不再有单独的「评估」和「回答」LLM call。
+
+通过 async generator yield NDJSON 行，供 StreamingResponse 直接消费。
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import uuid
 from typing import Any, AsyncIterator
 
-from ..services.llm_client import LLMClient
-from ..services.lightrag_client import LightRAGClient
-from ..services.search_client import SearchClient
-from ..services.search_types import SearchResponse
 from ..core.config import get_settings
-from .stream import StreamEventType, make_event
-from .prompts import (
-    EVALUATE_SYSTEM_PROMPT, EVALUATE_USER_TEMPLATE,
-    ANSWER_SYSTEM_PROMPT, ANSWER_USER_TEMPLATE,
-    CONVERSATIONAL_SYSTEM_PROMPT, CONVERSATIONAL_USER_TEMPLATE,
+from ..services.lightrag_client import LightRAGClient
+from ..services.llm_client import LLMClient, LLMStreamChunk
+from ..services.search_client import SearchClient
+from .bus import StreamBus
+from .context import UnifiedContext
+from .prompt_assembler import ChatPromptAssembler
+from .state import (
+    AgentLoopState,
+    AskUserPayload,
+    LoopOutcome,
+    SourceItem,
+    ToolCall,
 )
+from .stream import StreamEventType
+from .think_filter import InlineThinkFilter
+from .tools import TOOL_DEFINITIONS, dispatch_tool_calls
 
-logger = logging.getLogger("aitutor.agentloop")
+logger = logging.getLogger("aitutor.agentloop.loop")
 
-# 上下文截断上限（评估和回答时截断过长上下文）
-EVALUATE_CONTEXT_MAX_CHARS = 4000
-ANSWER_CONTEXT_MAX_CHARS = 8000
-
-# 短查询阈值（低于此长度直接走 LLM 回答，不走 LightRAG）
-MIN_LIGHTRAG_QUERY_LENGTH = 3
-
-
-class EvalResult:
-    """LLM 评估结果。"""
-
-    quality: str          # "sufficient" / "insufficient"
-    reason: str           # 评估理由
-    rewritten_query: str  # 改写后的查询（仅 insufficient 时有值）
-    missing_aspects: list[str]  # 缺少的关键方面
-    need_web_search: bool  # 是否需要联网搜索
-
-    def __init__(
-        self,
-        quality: str,
-        reason: str = "",
-        rewritten_query: str = "",
-        missing_aspects: list[str] | None = None,
-        need_web_search: bool = False,
-    ):
-        self.quality = quality
-        self.reason = reason
-        self.rewritten_query = rewritten_query
-        self.missing_aspects = missing_aspects or []
-        self.need_web_search = need_web_search
-
-
-def _truncate(text: str, max_chars: int) -> str:
-    """截断过长文本，保留前 max_chars 字符 + 截断提示。"""
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars].rstrip() + "\n\n...[上下文过长，已截断]"
-
-
-def _parse_eval_json(raw: str) -> EvalResult:
-    """解析 LLM 返回的评估 JSON，容错处理非标准输出。"""
-    # 尝试直接解析
-    try:
-        obj = json.loads(raw.strip())
-        return EvalResult(
-            quality=obj.get("quality", "insufficient"),
-            reason=obj.get("reason", ""),
-            rewritten_query=obj.get("rewritten_query", ""),
-            missing_aspects=obj.get("missing_aspects", []),
-            need_web_search=obj.get("need_web_search", False),
-        )
-    except json.JSONDecodeError:
-        pass
-
-    # 尝试从文本中提取 JSON（模型可能包裹了额外文本）
-    import re
-    json_match = re.search(r"\{[\s\S]*\}", raw)
-    if json_match:
-        try:
-            obj = json.loads(json_match.group())
-            return EvalResult(
-                quality=obj.get("quality", "insufficient"),
-                reason=obj.get("reason", ""),
-                rewritten_query=obj.get("rewritten_query", ""),
-                missing_aspects=obj.get("missing_aspects", []),
-                need_web_search=obj.get("need_web_search", False),
-            )
-        except json.JSONDecodeError:
-            pass
-
-    # 无法解析，默认 insufficient + 建议联网搜索
-    logger.warning("无法解析 LLM 评估 JSON: %s", raw[:200])
-    return EvalResult(
-        quality="insufficient",
-        reason="LLM 评估结果无法解析",
-        rewritten_query="",
-        missing_aspects=["LLM 评估失败"],
-        need_web_search=True,
-    )
-
-
-def _format_search_context(resp: SearchResponse) -> str:
-    """将 DuckDuckGo 搜索结果格式化为 LLM 可读文本。"""
-    if not resp.search_results:
-        return ""
-    lines = [f"【联网搜索结果（来源: {resp.provider}）】"]
-    for r in resp.search_results:
-        lines.append(f"- {r.title}: {r.snippet} (来源: {r.url})")
-    return "\n".join(lines)
+# 短查询阈值：低于此长度跳过 RAG，直接 LLM 作答（避免 LightRAG 对极短输入 422）
+_SHORT_QUERY_THRESHOLD = 3
 
 
 class AgentLoop:
-    """查询改写循环 — 不断优化检索查询直到上下文充分，再综合生成回答。
-
-    支持：
-    - 短查询兜底（< 3字符直接走 LLM 回答，避免 LightRAG 422）
-    - 联网搜索双重触发（LLM 自动判断 need_web_search + 用户手动 force_web_search）
-    - DuckDuckGo 零配置搜索补充
-    - call_id / call_kind / call_role 门控标记（对齐 DeepTutor 的上下文 vs 展示分离）
-    """
+    """Tool-calling agent loop（chat 能力）。"""
 
     def __init__(
         self,
+        *,
         llm_client: LLMClient,
         lightrag_client: LightRAGClient,
-        search_client: SearchClient | None = None,
+        search_client: SearchClient | None,
+        memory_manager: Any | None = None,
         max_rounds: int | None = None,
-    ):
+    ) -> None:
+        self._llm = llm_client
+        self._lightrag = lightrag_client
+        self._search = search_client
+        self._memory = memory_manager
         settings = get_settings()
-        self.llm = llm_client
-        self.lightrag = lightrag_client
-        self.search = search_client  # DuckDuckGo 搜索客户端（可选）
-        self.max_rounds = max_rounds or settings.agent_loop_max_rounds
-        self.temperature = settings.agent_loop_temperature
-        self.max_tokens = settings.agent_loop_max_tokens
+        self._max_rounds = max_rounds if max_rounds is not None else settings.agent_loop_max_rounds
+        self._temperature = settings.agent_loop_temperature
+        self._max_tokens = settings.agent_loop_max_tokens
+
+    # ------------------------------------------------------------------
+    #  入口：新查询
+    # ------------------------------------------------------------------
 
     async def run_stream(
         self,
         query: str,
+        *,
         mode: str = "mix",
         force_web_search: bool = False,
+        session_id: str | None = None,
     ) -> AsyncIterator[str]:
-        """运行 AgentLoop 并 yield NDJSON 行（每行含尾部换行）。
+        """主入口：创建 bus/state/context → 运行 loop → 流式 yield NDJSON。
 
-        参数:
-            query: 用户查询
-            mode: LightRAG 查询模式
-            force_web_search: 用户手动勾选联网搜索
+        关键改动：loop + finalize 在后台 asyncio.Task 中运行（并发往 bus emit 事件），
+        同时前台 stream_lines() 并行消费 queue 并逐行 yield 给 StreamingResponse。
+        这让前端在 loop 运行过程中实时收到每个事件，而不是攒完再发。
         """
-        # ---- 短查询兜底（< 3字符直接走 LLM 回答） ----
-        if len(query.strip()) < MIN_LIGHTRAG_QUERY_LENGTH:
-            async for line in self._stream_short_query(query, mode, force_web_search):
+        bus = StreamBus()
+        sid = session_id or f"sess_{uuid.uuid4().hex[:16]}"
+
+        self._ensure_session(sid)
+        await bus.emit(
+            StreamEventType.SESSION,
+            metadata={"session_id": sid},
+        )
+
+        # 短查询快路径：直接 LLM 作答，不走 tool-calling
+        if len(query.strip()) < _SHORT_QUERY_THRESHOLD:
+            task = asyncio.create_task(
+                self._run_short_query_inner(bus, query, sid, force_web_search)
+            )
+            async for line in bus.stream_lines():
+                yield line
+            try:
+                await task
+            except Exception:
+                pass
+            return
+
+        # 组装 system prompt（含记忆块）
+        memory_context = await self._get_memory_context(sid)
+        system_prompt = ChatPromptAssembler.assemble(
+            max_rounds=self._max_rounds,
+            memory_context=memory_context,
+            force_web_search=force_web_search,
+        )
+
+        # 记录用户消息到 L1 追踪
+        self._trace(sid, {"kind": "user_message", "content": query})
+
+        ctx = UnifiedContext(
+            system_prompt=system_prompt,
+            session_id=sid,
+            original_query=query,
+            mode=mode,
+        )
+
+        await bus.emit(
+            StreamEventType.STAGE_START,
+            metadata={
+                "original_query": query,
+                "mode": mode,
+                "max_rounds": self._max_rounds,
+                "call_id": "loop_start",
+                "call_kind": "agent_loop",
+            },
+        )
+
+        # 关键：把 loop + finalize 合为一个后台 task
+        async def _run_and_finalize() -> None:
+            try:
+                outcome = await self._run_loop(ctx, bus)
+                await self._finalize(bus, ctx, outcome)
+            except Exception as exc:
+                logger.error("loop task failed: %s", exc)
+                await bus.emit_error(f"内部错误: {exc}")
+                await bus.finish()
+
+        loop_task = asyncio.create_task(_run_and_finalize())
+
+        # 前台：边消费 bus queue 边 yield（loop_task 在后台并发 emit）
+        async for line in bus.stream_lines():
+            yield line
+
+        # 确保 task 完成（防异常泄露）
+        try:
+            await loop_task
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    #  入口：ask_user 恢复
+    # ------------------------------------------------------------------
+
+    async def resume_stream(
+        self,
+        session_id: str,
+        answers: dict[str, str],
+    ) -> AsyncIterator[str]:
+        """ask_user 暂停恢复：从 DB 加载 context → 替换 tool message → 继续 loop。
+
+        同 run_stream，loop + finalize 在后台 task 运行，前台并行消费 stream_lines。
+        """
+        bus = StreamBus()
+
+        paused = self._load_paused(session_id)
+        if paused is None:
+            await bus.emit_error("没有可恢复的暂停会话（可能已超时或不存在）")
+            await bus.finish()
+            async for line in bus.stream_lines():
                 yield line
             return
 
-        # ---- 正常流程：检索 → 评估 → 搜索 → 改写 → 回答 ----
-        accumulated_context = ""
-        accumulated_web_context = ""
-        accumulated_references: list[dict[str, Any]] = []
-        current_query = query
-        rounds_done = 0
-        completed = False
+        snapshot, paused_round = paused
 
-        # 1. Loop 开始
-        yield make_event(
-            StreamEventType.STAGE_START,
-            round=0,
+        memory_context = await self._get_memory_context(session_id)
+        system_prompt = ChatPromptAssembler.assemble(
+            max_rounds=self._max_rounds,
+            memory_context=memory_context,
+            force_web_search=False,
+        )
+        ctx = UnifiedContext.from_snapshot(snapshot, system_prompt)
+
+        self._substitute_user_reply(ctx, answers)
+        self._clear_paused(session_id)
+
+        await bus.emit(
+            StreamEventType.SESSION,
+            metadata={"session_id": session_id, "resumed": True},
+        )
+        await bus.emit(
+            StreamEventType.PROGRESS,
+            round=paused_round,
+            content="已收到用户回复，继续处理",
             metadata={
-                "original_query": query, "mode": mode, "max_rounds": self.max_rounds,
-                "call_id": "loop_start", "call_kind": "agent_loop",
+                "call_id": "user_reply",
+                "call_kind": "agent_loop",
+                "call_role": "narration",
+                "ask_user_resolved": True,
             },
-        ).to_ndjson()
-
-        # 2. 循环：检索 → 评估 → (搜索) → 改写
-        for round_num in range(self.max_rounds):
-            rounds_done = round_num + 1
-
-            # 每轮循环共享同一个 call_id
-            round_call_id = f"agent_loop_round_{round_num}"
-            # 评估 LLM 调用有自己的 call_id
-            eval_call_id = f"eval_round_{round_num}"
-            # 搜索调用有自己的 call_id
-            search_call_id = f"search_round_{round_num}"
-
-            # 2a. 检索上下文
-            yield make_event(
-                StreamEventType.OBSERVATION,
-                round=round_num,
-                content=f"正在检索（第 {round_num + 1} 轮）...",
-                metadata={
-                    "query": current_query, "mode": mode,
-                    "call_id": round_call_id, "call_kind": "agent_loop_round", "call_role": "retrieve",
-                },
-            ).to_ndjson()
-
-            try:
-                context_result = await self.lightrag.query_context({
-                    "query": current_query,
-                    "mode": mode,
-                })
-            except Exception as exc:
-                # LightRAG 检索失败，如果可联网搜索则降级到搜索模式
-                if self.search is not None:
-                    yield make_event(
-                        StreamEventType.PROGRESS,
-                        round=round_num,
-                        content=f"知识库检索失败，尝试联网搜索补充: {exc}",
-                        metadata={
-                            "quality": "rag_failed", "fallback": "web_search",
-                            "call_id": round_call_id, "call_kind": "agent_loop_round", "call_role": "narration",
-                        },
-                    ).to_ndjson()
-                    # 尝试联网搜索
-                    try:
-                        search_resp = await self.search.search(current_query)
-                        web_context = _format_search_context(search_resp)
-                        if web_context:
-                            accumulated_context += web_context + "\n\n"
-                            yield make_event(
-                                StreamEventType.SEARCH,
-                                round=round_num,
-                                content=f"找到 {len(search_resp.search_results)} 条网络结果",
-                                metadata={
-                                    "query": current_query, "provider": "duckduckgo",
-                                    "status": "complete",
-                                    "results": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in search_resp.search_results],
-                                    "call_id": search_call_id, "call_kind": "web_search",
-                                },
-                            ).to_ndjson()
-                            for cit in search_resp.citations:
-                                accumulated_references.append({
-                                    "reference_id": f"web_{cit.id}",
-                                    "file_path": cit.url,
-                                    "content": [{"text": cit.snippet}],
-                                })
-                    except Exception:
-                        pass  # 搜索也失败，静默继续
-                else:
-                    yield make_event(
-                        StreamEventType.ERROR,
-                        round=round_num,
-                        content=f"检索失败: {exc}",
-                        metadata={"call_id": round_call_id, "call_kind": "agent_loop_round"},
-                    ).to_ndjson()
-                    yield make_event(StreamEventType.DONE).to_ndjson()
-                    return
-
-            raw_context = context_result.get("response", "")
-            refs = context_result.get("references") or []
-
-            # 累积上下文和引用（去重引用）
-            accumulated_context += raw_context + "\n\n"
-            for ref in refs:
-                if not any(r.get("reference_id") == ref.get("reference_id") for r in accumulated_references):
-                    accumulated_references.append(ref)
-
-            # 发送检索结果摘要
-            context_preview = _truncate(raw_context, 500)
-            yield make_event(
-                StreamEventType.OBSERVATION,
-                round=round_num,
-                content=context_preview,
-                metadata={
-                    "query": current_query, "full_length": len(raw_context), "refs_count": len(refs),
-                    "call_id": round_call_id, "call_kind": "agent_loop_round", "call_role": "observe",
-                },
-            ).to_ndjson()
-
-            # 发送本轮引用
-            if refs:
-                yield make_event(
-                    StreamEventType.REFERENCES,
-                    round=round_num,
-                    metadata={
-                        "references": refs,
-                        "call_id": round_call_id, "call_kind": "agent_loop_round",
-                    },
-                ).to_ndjson()
-
-            # 2b. 评估上下文质量
-            eval_context = _truncate(accumulated_context, EVALUATE_CONTEXT_MAX_CHARS)
-            eval_user = EVALUATE_USER_TEMPLATE.format(query=query, context=eval_context)
-
-            yield make_event(
-                StreamEventType.THINKING,
-                round=round_num,
-                content="正在评估检索到的上下文质量...",
-                metadata={
-                    "call_id": eval_call_id, "call_kind": "llm_evaluation", "call_role": "thought",
-                },
-            ).to_ndjson()
-
-            try:
-                eval_raw = await self.llm.call(
-                    system_prompt=EVALUATE_SYSTEM_PROMPT,
-                    user_prompt=eval_user,
-                    response_format={"type": "json_object"},
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                )
-            except Exception as exc:
-                yield make_event(
-                    StreamEventType.ERROR,
-                    round=round_num,
-                    content=f"LLM 评估调用失败: {exc}",
-                    metadata={"call_id": eval_call_id, "call_kind": "llm_evaluation"},
-                ).to_ndjson()
-                yield make_event(StreamEventType.DONE).to_ndjson()
-                return
-
-            eval_result = _parse_eval_json(eval_raw)
-
-            # 发送评估思考
-            yield make_event(
-                StreamEventType.THINKING,
-                round=round_num,
-                content=eval_result.reason,
-                metadata={
-                    "quality": eval_result.quality, "need_web_search": eval_result.need_web_search,
-                    "call_id": eval_call_id, "call_kind": "llm_evaluation", "call_role": "thought",
-                },
-            ).to_ndjson()
-
-            # 2c. 联网搜索（双重触发：LLM 自动判断 + 用户手动勾选）
-            need_search = eval_result.need_web_search or force_web_search
-            if need_search and self.search is not None:
-                yield make_event(
-                    StreamEventType.SEARCH,
-                    round=round_num,
-                    content=f"正在联网搜索「{current_query}」...",
-                    metadata={
-                        "query": current_query, "provider": "duckduckgo", "status": "searching",
-                        "call_id": search_call_id, "call_kind": "web_search",
-                    },
-                ).to_ndjson()
-
-                try:
-                    search_resp = await self.search.search(current_query)
-                    web_context = _format_search_context(search_resp)
-                    accumulated_web_context += web_context + "\n\n"
-                    accumulated_context += web_context + "\n\n"
-
-                    yield make_event(
-                        StreamEventType.SEARCH,
-                        round=round_num,
-                        content=f"找到 {len(search_resp.search_results)} 条网络结果",
-                        metadata={
-                            "query": current_query, "provider": "duckduckgo",
-                            "status": "complete",
-                            "results": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in search_resp.search_results],
-                            "call_id": search_call_id, "call_kind": "web_search",
-                        },
-                    ).to_ndjson()
-
-                    # 搜索引用合并到 references
-                    for cit in search_resp.citations:
-                        if not any(r.get("reference_id") == f"web_{cit.id}" for r in accumulated_references):
-                            accumulated_references.append({
-                                "reference_id": f"web_{cit.id}",
-                                "file_path": cit.url,
-                                "content": [{"text": cit.snippet}],
-                            })
-                except Exception as exc:
-                    yield make_event(
-                        StreamEventType.SEARCH,
-                        round=round_num,
-                        content=f"联网搜索失败: {exc}",
-                        metadata={
-                            "status": "failed",
-                            "call_id": search_call_id, "call_kind": "web_search",
-                        },
-                    ).to_ndjson()
-
-            # 发送评估进度
-            progress_content = "上下文充分，准备生成回答" if eval_result.quality == "sufficient" else "上下文不充分，需要改写查询"
-            yield make_event(
-                StreamEventType.PROGRESS,
-                round=round_num,
-                content=progress_content,
-                metadata={
-                    "quality": eval_result.quality,
-                    "rewritten_query": eval_result.rewritten_query if eval_result.quality == "insufficient" else "",
-                    "missing_aspects": eval_result.missing_aspects,
-                    "need_web_search": eval_result.need_web_search,
-                    "call_id": round_call_id, "call_kind": "agent_loop_round",
-                    # 门控：sufficient 轮次的 progress 属于 finish（不再循环），
-                    # insufficient 轮次属于 narration（中间步骤说明）
-                    "call_role": "finish" if eval_result.quality == "sufficient" else "narration",
-                },
-            ).to_ndjson()
-
-            if eval_result.quality == "sufficient":
-                completed = True
-                break
-
-            # 2d. 改写查询
-            if not eval_result.rewritten_query:
-                eval_result.rewritten_query = f"{query} {', '.join(eval_result.missing_aspects)}"
-
-            yield make_event(
-                StreamEventType.QUERY_REWRITE,
-                round=round_num + 1,
-                content=eval_result.rewritten_query,
-                metadata={
-                    "original_query": query,
-                    "call_id": round_call_id, "call_kind": "agent_loop_round", "call_role": "narration",
-                },
-            ).to_ndjson()
-
-            current_query = eval_result.rewritten_query
-
-        # 3. 如果循环结束仍未 sufficient，标记为强制完成
-        if not completed:
-            yield make_event(
-                StreamEventType.PROGRESS,
-                round=rounds_done,
-                content=f"达到最大轮数 ({self.max_rounds})，强制综合回答",
-                metadata={
-                    "quality": "forced",
-                    "call_id": "loop_summary", "call_kind": "agent_loop_round", "call_role": "narration",
-                },
-            ).to_ndjson()
-
-        # 4. 综合回答（流式）— call_kind="llm_final_response" + call_role="finish"
-        answer_call_id = "answer"
-        answer_context = _truncate(accumulated_context, ANSWER_CONTEXT_MAX_CHARS)
-        web_context_str = _truncate(accumulated_web_context, 2000) if accumulated_web_context else "无联网搜索结果"
-        answer_user = ANSWER_USER_TEMPLATE.format(
-            query=query,
-            accumulated_context=answer_context,
-            web_search_context=web_context_str,
         )
 
-        try:
-            async for chunk in self.llm.stream(
-                system_prompt=ANSWER_SYSTEM_PROMPT,
-                user_prompt=answer_user,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            ):
-                yield make_event(
-                    StreamEventType.CONTENT,
-                    round=0,
-                    content=chunk,
-                    metadata={
-                        "call_id": answer_call_id, "call_kind": "llm_final_response", "call_role": "finish",
-                    },
-                ).to_ndjson()
-        except Exception as exc:
-            yield make_event(
-                StreamEventType.ERROR,
-                content=f"综合回答生成失败: {exc}",
-                metadata={"call_id": answer_call_id, "call_kind": "llm_final_response"},
-            ).to_ndjson()
-            yield make_event(StreamEventType.DONE).to_ndjson()
-            return
+        state = AgentLoopState()
+        state.round = paused_round
 
-        # 5. 发送合并引用
-        if accumulated_references:
-            yield make_event(
+        # 关键：把 continue_loop + finalize 合为一个后台 task
+        async def _resume_and_finalize() -> None:
+            try:
+                outcome = await self._continue_loop(ctx, state, bus, start_round=paused_round)
+                await self._finalize(bus, ctx, outcome)
+            except Exception as exc:
+                logger.error("resume task failed: %s", exc)
+                await bus.emit_error(f"恢复失败: {exc}")
+                await bus.finish()
+
+        loop_task = asyncio.create_task(_resume_and_finalize())
+
+        # 前台：边消费 bus queue 边 yield
+        async for line in bus.stream_lines():
+            yield line
+
+        try:
+            await loop_task
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    #  核心：tool-calling 循环
+    # ------------------------------------------------------------------
+
+    async def _run_loop(
+        self,
+        ctx: UnifiedContext,
+        bus: StreamBus,
+    ) -> LoopOutcome:
+        state = AgentLoopState()
+        return await self._continue_loop(ctx, state, bus, start_round=0)
+
+    async def _continue_loop(
+        self,
+        ctx: UnifiedContext,
+        state: AgentLoopState,
+        bus: StreamBus,
+        *,
+        start_round: int,
+    ) -> LoopOutcome:
+        """从 start_round 继续运行循环。被 _run_loop 和 resume_stream 共用。"""
+        nudged_empty = False
+
+        for round_idx in range(start_round, self._max_rounds):
+            state.round = round_idx + 1
+
+            # 一次流式 LLM 调用（带 tool schemas）
+            text_parts, tool_calls = await self._call_llm_streaming(
+                ctx, bus, round=state.round
+            )
+            full_text = "".join(text_parts).strip()
+
+            # 无 tool_calls：检查是否 finish
+            if not tool_calls:
+                if not full_text and not nudged_empty:
+                    # 空回答：注入 nudge 继续
+                    nudged_empty = True
+                    ctx.add_assistant(full_text)
+                    ctx.add_nudge()
+                    await bus.emit(
+                        StreamEventType.PROGRESS,
+                        round=state.round,
+                        content="本轮无输出，已请求模型继续",
+                        metadata={
+                            "call_id": f"round_{state.round}",
+                            "call_kind": "agent_loop_round",
+                            "call_role": "narration",
+                            "quality": "empty_nudge",
+                        },
+                    )
+                    continue
+
+                # 有文本（或已 nudge 过）：finish
+                ctx.add_assistant(full_text)
+                state.finished = True
+                self._trace(
+                    ctx.session_id, {"kind": "answer", "content": full_text}
+                )
+                await bus.emit(
+                    StreamEventType.PROGRESS,
+                    round=state.round,
+                    metadata={
+                        "call_id": f"round_{state.round}",
+                        "call_kind": "agent_loop_round",
+                        "call_role": "finish",
+                        "quality": "sufficient",
+                    },
+                )
+                return LoopOutcome(
+                    answer=full_text,
+                    sources=list(ctx.sources),
+                    rounds=state.round,
+                    completed=True,
+                    forced=False,
+                )
+
+            # 有 tool_calls：narration，执行工具
+            ctx.add_assistant(full_text, tool_calls=tool_calls)
+            outcome = await dispatch_tool_calls(
+                tool_calls,
+                bus=bus,
+                lightrag=self._lightrag,
+                search=self._search,
+                state=state,
+                round=state.round,
+                mode=ctx.mode,
+            )
+            for tm in outcome.tool_messages:
+                ctx.add_tool_result(tm["tool_call_id"], tm["name"], tm["content"])
+            ctx.extend_sources(outcome.sources)
+
+            for tc in tool_calls:
+                self._trace(
+                    ctx.session_id,
+                    {
+                        "kind": "tool_call",
+                        "name": tc.name,
+                        "summary": _summarize_tool_args(tc),
+                    },
+                )
+
+            await bus.emit(
+                StreamEventType.PROGRESS,
+                round=state.round,
+                metadata={
+                    "call_id": f"round_{state.round}",
+                    "call_kind": "agent_loop_round",
+                    "call_role": "narration",
+                    "quality": "narration",
+                    "tools": [tc.name for tc in tool_calls],
+                },
+            )
+
+            # ask_user 暂停
+            if outcome.pause and outcome.pause_payload is not None:
+                state.paused = True
+                await self._pause_for_user(
+                    ctx, bus, outcome.pause_payload, round=state.round
+                )
+                return LoopOutcome(
+                    answer="",
+                    sources=list(ctx.sources),
+                    rounds=state.round,
+                    completed=False,
+                    forced=False,
+                )
+
+        # max_rounds 用尽：forced finish
+        return await self._forced_finish(ctx, bus, state)
+
+    async def _forced_finish(
+        self,
+        ctx: UnifiedContext,
+        bus: StreamBus,
+        state: AgentLoopState,
+    ) -> LoopOutcome:
+        """预算耗尽：注入 force nudge，再调一次不带 tool 的 LLM。"""
+        await bus.emit(
+            StreamEventType.PROGRESS,
+            round=state.round,
+            content="已达最大轮次，强制作答",
+            metadata={
+                "call_id": f"round_{state.round}",
+                "call_kind": "agent_loop_round",
+                "call_role": "narration",
+                "quality": "forced",
+            },
+        )
+        ctx.add_nudge(force=True)
+        text_parts, _ = await self._call_llm_streaming(
+            ctx, bus, round=state.round + 1, with_tools=False
+        )
+        full_text = "".join(text_parts).strip()
+        ctx.add_assistant(full_text)
+        state.finished = True
+        self._trace(ctx.session_id, {"kind": "answer", "content": full_text})
+        await bus.emit(
+            StreamEventType.PROGRESS,
+            round=state.round + 1,
+            metadata={
+                "call_id": f"round_{state.round}",
+                "call_kind": "agent_loop_round",
+                "call_role": "finish",
+                "quality": "forced",
+            },
+        )
+        return LoopOutcome(
+            answer=full_text,
+            sources=list(ctx.sources),
+            rounds=state.round + 1,
+            completed=True,
+            forced=True,
+        )
+
+    # ------------------------------------------------------------------
+    #  LLM 流式调用（带 InlineThinkFilter）
+    # ------------------------------------------------------------------
+
+    async def _call_llm_streaming(
+        self,
+        ctx: UnifiedContext,
+        bus: StreamBus,
+        *,
+        round: int,
+        with_tools: bool = True,
+    ) -> tuple[list[str], list[ToolCall]]:
+        """一次流式 LLM 调用，发射 thinking/content 事件，返回 (text_parts, tool_calls)。"""
+        think_filter = InlineThinkFilter()
+        text_parts: list[str] = []
+        tool_acc: dict[int, dict[str, Any]] = {}
+
+        tools = TOOL_DEFINITIONS if with_tools else None
+
+        await bus.emit(
+            StreamEventType.PROGRESS,
+            round=round,
+            metadata={
+                "call_state": "running",
+                "call_id": f"round_{round}",
+                "call_kind": "agent_loop_round",
+            },
+        )
+
+        async for chunk in self._llm.stream_with_tools(
+            ctx.system_prompt,
+            ctx.messages,
+            tools=tools,
+            temperature=self._temperature,
+            max_tokens=self._max_tokens,
+        ):
+            chunk: LLMStreamChunk
+            if chunk.type == "reasoning":
+                await bus.emit(
+                    StreamEventType.THINKING,
+                    round=round,
+                    content=chunk.content,
+                    metadata={
+                        "call_id": f"round_{round}",
+                        "call_kind": "agent_loop_round",
+                        "call_role": "thought",
+                    },
+                )
+            elif chunk.type == "content":
+                for kind, text in think_filter.feed(chunk.content):
+                    if kind == "thinking":
+                        await bus.emit(
+                            StreamEventType.THINKING,
+                            round=round,
+                            content=text,
+                            metadata={
+                                "call_id": f"round_{round}",
+                                "call_kind": "agent_loop_round",
+                                "call_role": "thought",
+                            },
+                        )
+                    else:
+                        text_parts.append(text)
+                        await bus.emit(
+                            StreamEventType.CONTENT,
+                            round=round,
+                            content=text,
+                            metadata={
+                                "call_id": f"round_{round}",
+                                "call_kind": "agent_loop_round",
+                                "call_role": "narration",
+                                "streaming": True,
+                            },
+                        )
+            elif chunk.type == "tool_call_delta" and chunk.tool_call_delta:
+                _accumulate_tool_delta(tool_acc, chunk.tool_call_delta)
+
+        for kind, text in think_filter.flush():
+            if kind == "thinking":
+                await bus.emit(
+                    StreamEventType.THINKING,
+                    round=round,
+                    content=text,
+                    metadata={
+                        "call_id": f"round_{round}",
+                        "call_kind": "agent_loop_round",
+                        "call_role": "thought",
+                    },
+                )
+            else:
+                text_parts.append(text)
+                await bus.emit(
+                    StreamEventType.CONTENT,
+                    round=round,
+                    content=text,
+                    metadata={
+                        "call_id": f"round_{round}",
+                        "call_kind": "agent_loop_round",
+                        "call_role": "narration",
+                        "streaming": True,
+                    },
+                )
+
+        tool_calls = _materialize_tool_calls(tool_acc)
+
+        await bus.emit(
+            StreamEventType.PROGRESS,
+            round=round,
+            metadata={
+                "call_state": "complete",
+                "call_id": f"round_{round}",
+                "call_kind": "agent_loop_round",
+                "call_role": "finish" if not tool_calls else "narration",
+                "has_tool_calls": bool(tool_calls),
+                "tool_names": [tc.name for tc in tool_calls],
+            },
+        )
+
+        return text_parts, tool_calls
+
+    # ------------------------------------------------------------------
+    #  ask_user 暂停
+    # ------------------------------------------------------------------
+
+    async def _pause_for_user(
+        self,
+        ctx: UnifiedContext,
+        bus: StreamBus,
+        payload: AskUserPayload,
+        *,
+        round: int,
+    ) -> None:
+        """发射 wait_for_input 事件，保存 context 快照到 DB，结束本次流。"""
+        self._save_paused(ctx, round)
+        await bus.emit(
+            StreamEventType.WAIT_FOR_INPUT,
+            round=round,
+            content=payload.context or "需要更多信息",
+            metadata={
+                "ask_user": payload.to_dict(),
+                "call_id": f"ask_user_{round}",
+                "call_kind": "tool_call",
+                "call_role": "narration",
+            },
+        )
+
+    def _substitute_user_reply(
+        self, ctx: UnifiedContext, answers: dict[str, str]
+    ) -> None:
+        """恢复时把 ask_user 的占位 tool message 替换为用户答案 directive。"""
+        directive_lines = ["[ask_user 已解决，用户回复如下，请据此继续完成原始请求：]"]
+        for qid, ans in answers.items():
+            directive_lines.append(f"- {qid}: {ans}")
+        directive_lines.append("[请基于以上回复继续，不要只回执确认。]")
+        directive = "\n".join(directive_lines)
+
+        for msg in reversed(ctx.messages):
+            if msg.get("role") == "tool" and msg.get("name") == "ask_user":
+                msg["content"] = directive
+                break
+
+    # ------------------------------------------------------------------
+    #  短查询快路径
+    # ------------------------------------------------------------------
+
+    async def _run_short_query_inner(
+        self,
+        bus: StreamBus,
+        query: str,
+        session_id: str,
+        force_web_search: bool,
+    ) -> None:
+        """短查询（<3 字符）内部逻辑：emit SESSION+PROGRESS+content，然后 finish。
+        不消费 stream_lines（由 run_stream 前台消费）。
+        """
+        self._trace(session_id, {"kind": "user_message", "content": query})
+        await bus.emit(
+            StreamEventType.PROGRESS,
+            metadata={
+                "call_id": "short_query",
+                "call_kind": "agent_loop",
+                "call_role": "finish",
+                "quality": "short_query",
+            },
+        )
+
+        system_prompt = ChatPromptAssembler.assemble(max_rounds=self._max_rounds)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query},
+        ]
+        async for chunk in self._llm.stream_with_tools(
+            system_prompt, messages[1:], tools=None,
+            temperature=self._temperature, max_tokens=self._max_tokens,
+        ):
+            if chunk.type == "content":
+                await bus.emit(StreamEventType.CONTENT, content=chunk.content, metadata={
+                    "call_id": "short_query", "call_kind": "agent_loop", "call_role": "finish",
+                })
+
+        await bus.finish(result_metadata={
+            "rounds": 0, "completed": True, "engine": "agent_loop",
+            "short_query": True,
+        })
+
+    # ------------------------------------------------------------------
+    #  收尾
+    # ------------------------------------------------------------------
+
+    async def _finalize(
+        self, bus: StreamBus, ctx: UnifiedContext, outcome: LoopOutcome
+    ) -> None:
+        """发射 sources + references + result + done。"""
+        if ctx.sources:
+            await bus.emit(
+                StreamEventType.SOURCES,
+                metadata={
+                    "sources": [_source_to_dict(s) for s in ctx.sources],
+                    "call_id": "loop_summary",
+                    "call_kind": "agent_loop",
+                },
+            )
+            await bus.emit(
                 StreamEventType.REFERENCES,
                 metadata={
-                    "references": accumulated_references,
-                    "call_id": answer_call_id, "call_kind": "llm_final_response",
+                    "references": [_source_to_reference(s) for s in ctx.sources],
+                    "call_id": "loop_summary",
+                    "call_kind": "agent_loop",
                 },
-            ).to_ndjson()
+            )
 
-        # 6. 结果摘要
-        yield make_event(
-            StreamEventType.RESULT,
-            metadata={
-                "rounds": rounds_done, "completed": completed, "engine": "agent_loop",
+        await bus.finish(
+            result_metadata={
+                "rounds": outcome.rounds,
+                "completed": outcome.completed,
+                "forced": outcome.forced,
+                "engine": "agent_loop",
                 "call_id": "loop_summary",
-            },
-        ).to_ndjson()
+                "call_kind": "agent_loop",
+            }
+        )
 
-        # 7. 流结束
-        yield make_event(StreamEventType.DONE).to_ndjson()
-
-    async def _stream_short_query(
-        self,
-        query: str,
-        mode: str = "mix",
-        force_web_search: bool = False,
-    ) -> AsyncIterator[str]:
-        """短查询（< 3字符）直接走 LLM 回答，不走 LightRAG 检索。
-
-        避免 LightRAG 的 422 "String should have at least 3 characters" 错误。
-        """
-        yield make_event(
-            StreamEventType.STAGE_START,
-            round=0,
-            metadata={
-                "original_query": query, "mode": mode, "short_query": True, "max_rounds": 0,
-                "call_id": "short_query", "call_kind": "agent_loop_round",
-            },
-        ).to_ndjson()
-
-        yield make_event(
-            StreamEventType.PROGRESS,
-            round=0,
-            content="短查询，直接生成回答",
-            metadata={
-                "quality": "short_query",
-                "call_id": "short_query", "call_kind": "agent_loop_round", "call_role": "narration",
-            },
-        ).to_ndjson()
-
-        # 联网搜索（如果用户手动勾选）
-        web_context_str = "无联网搜索结果"
-        search_call_id = "short_query_search"
-        if force_web_search and self.search is not None:
-            yield make_event(
-                StreamEventType.SEARCH,
-                round=0,
-                content=f"正在联网搜索「{query}」...",
-                metadata={
-                    "query": query, "provider": "duckduckgo", "status": "searching",
-                    "call_id": search_call_id, "call_kind": "web_search",
-                },
-            ).to_ndjson()
+        # 异步触发记忆合并（completed 时才合并）
+        if outcome.completed and self._memory is not None:
             try:
-                search_resp = await self.search.search(query)
-                web_context = _format_search_context(search_resp)
-                web_context_str = _truncate(web_context, 2000) if web_context else "无联网搜索结果"
-                yield make_event(
-                    StreamEventType.SEARCH,
-                    round=0,
-                    content=f"找到 {len(search_resp.search_results)} 条网络结果",
-                    metadata={
-                        "query": query, "provider": "duckduckgo",
-                        "status": "complete",
-                        "results": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in search_resp.search_results],
-                        "call_id": search_call_id, "call_kind": "web_search",
-                    },
-                ).to_ndjson()
-                # 搜索引用
-                refs = []
-                for cit in search_resp.citations:
-                    refs.append({
-                        "reference_id": f"web_{cit.id}",
-                        "file_path": cit.url,
-                        "content": [{"text": cit.snippet}],
-                    })
-                if refs:
-                    yield make_event(
-                        StreamEventType.REFERENCES,
-                        metadata={
-                            "references": refs,
-                            "call_id": search_call_id, "call_kind": "web_search",
-                        },
-                    ).to_ndjson()
-            except Exception:
-                yield make_event(
-                    StreamEventType.SEARCH,
-                    round=0,
-                    content="联网搜索失败",
-                    metadata={
-                        "status": "failed",
-                        "call_id": search_call_id, "call_kind": "web_search",
-                    },
-                ).to_ndjson()
+                await self._memory.consolidate(ctx.session_id)
+            except Exception as exc:
+                logger.warning("memory consolidate skipped: %s", exc)
 
-        # LLM 直接回答
-        answer_call_id = "short_query_answer"
-        answer_user = CONVERSATIONAL_USER_TEMPLATE.format(query=query)
-        if web_context_str != "无联网搜索结果":
-            answer_user += f"\n\n联网搜索补充内容：\n{web_context_str}"
+    # ------------------------------------------------------------------
+    #  记忆/会话辅助
+    # ------------------------------------------------------------------
 
+    def _ensure_session(self, session_id: str) -> None:
+        if self._memory is not None:
+            try:
+                self._memory.create_session(session_id)
+            except Exception as exc:
+                logger.warning("create_session failed: %s", exc)
+
+    async def _get_memory_context(self, session_id: str) -> str:
+        if self._memory is None:
+            return ""
         try:
-            async for chunk in self.llm.stream(
-                system_prompt=CONVERSATIONAL_SYSTEM_PROMPT,
-                user_prompt=answer_user,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            ):
-                yield make_event(
-                    StreamEventType.CONTENT,
-                    round=0,
-                    content=chunk,
-                    metadata={
-                        "call_id": answer_call_id, "call_kind": "llm_final_response", "call_role": "finish",
-                    },
-                ).to_ndjson()
+            return await self._memory.get_memory_context(session_id)
         except Exception as exc:
-            yield make_event(
-                StreamEventType.ERROR,
-                content=f"回答生成失败: {exc}",
-                metadata={"call_id": answer_call_id, "call_kind": "llm_final_response"},
-            ).to_ndjson()
-            yield make_event(StreamEventType.DONE).to_ndjson()
+            logger.warning("get_memory_context failed: %s", exc)
+            return ""
+
+    def _trace(self, session_id: str, entry: dict[str, Any]) -> None:
+        if self._memory is None:
             return
+        try:
+            self._memory.append_trace(session_id, entry)
+        except Exception as exc:
+            logger.warning("append_trace failed: %s", exc)
 
-        # 结果摘要
-        yield make_event(
-            StreamEventType.RESULT,
-            metadata={
-                "rounds": 0, "completed": True, "engine": "agent_loop", "short_query": True,
-                "call_id": "loop_summary",
-            },
-        ).to_ndjson()
+    def _save_paused(self, ctx: UnifiedContext, round_num: int) -> None:
+        if self._memory is None:
+            return
+        try:
+            self._memory.save_paused_context(ctx.session_id, ctx.to_snapshot(), round_num)
+        except Exception as exc:
+            logger.warning("save_paused_context failed: %s", exc)
 
-        # 流结束
-        yield make_event(StreamEventType.DONE).to_ndjson()
+    def _load_paused(self, session_id: str) -> tuple[dict[str, Any], int] | None:
+        if self._memory is None:
+            return None
+        try:
+            return self._memory.load_paused_context(session_id)
+        except Exception as exc:
+            logger.warning("load_paused_context failed: %s", exc)
+            return None
+
+    def _clear_paused(self, session_id: str) -> None:
+        if self._memory is None:
+            return
+        try:
+            self._memory.clear_paused_context(session_id)
+        except Exception as exc:
+            logger.warning("clear_paused_context failed: %s", exc)
+
+
+# ------------------------------------------------------------------
+#  模块级辅助函数
+# ------------------------------------------------------------------
+
+def _accumulate_tool_delta(acc: dict[int, dict[str, Any]], delta: dict[str, Any]) -> None:
+    """累积流式 tool_call delta（按 index 聚合 id/name/arguments）。"""
+    idx = delta.get("index", 0)
+    slot = acc.setdefault(idx, {"arguments": ""})
+    if "id" in delta:
+        slot["id"] = delta["id"]
+    if "name" in delta:
+        slot["name"] = delta["name"]
+    if "arguments_delta" in delta:
+        slot["arguments"] += delta["arguments_delta"]
+
+
+def _materialize_tool_calls(acc: dict[int, dict[str, Any]]) -> list[ToolCall]:
+    """把累积的 tool_call delta 转为 ToolCall 列表。"""
+    result: list[ToolCall] = []
+    for idx in sorted(acc.keys()):
+        slot = acc[idx]
+        tid = slot.get("id") or f"call_{idx}"
+        name = slot.get("name", "")
+        if not name:
+            continue
+        raw_args = slot.get("arguments", "")
+        try:
+            arguments = json.loads(raw_args) if raw_args else {}
+        except json.JSONDecodeError:
+            arguments = {}
+        result.append(ToolCall(id=tid, name=name, arguments=arguments))
+    return result
+
+
+def _summarize_tool_args(tc: ToolCall) -> str:
+    """生成工具调用的简短摘要（用于 trace 展示）。"""
+    if tc.name == "rag":
+        return f"query={tc.arguments.get('query', '')[:80]}"
+    if tc.name == "web_search":
+        return f"query={tc.arguments.get('query', '')[:80]}"
+    if tc.name == "ask_user":
+        qs = tc.arguments.get("questions", [])
+        return f"{len(qs)} 个问题"
+    return json.dumps(tc.arguments, ensure_ascii=False)[:80]
+
+
+def _source_to_dict(s: SourceItem) -> dict[str, Any]:
+    return {"id": s.id, "content": s.content[:200], "file_path": s.file_path, "type": s.type}
+
+
+def _source_to_reference(s: SourceItem) -> dict[str, Any]:
+    """转成旧前端兼容的 ReferenceItem 形态。"""
+    if s.type == "web":
+        return {"reference_id": s.id, "file_path": s.id, "content": [s.content]}
+    return {"reference_id": s.id, "file_path": s.file_path, "content": [s.content]}
+
+
+__all__ = ["AgentLoop"]

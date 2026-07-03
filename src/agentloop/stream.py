@@ -16,19 +16,30 @@ import json
 
 
 class StreamEventType(str, Enum):
-    """AgentLoop NDJSON 流式事件类型。"""
+    """AgentLoop NDJSON 流式事件类型。
 
-    STAGE_START = "stage_start"       # Loop/轮次开始
-    THINKING = "thinking"             # LLM 评估思考过程
-    QUERY_REWRITE = "query_rewrite"   # 改写后的查询
-    OBSERVATION = "observation"       # 检索到的上下文摘要
-    PROGRESS = "progress"             # 评估结果/状态变更
-    CONTENT = "content"               # 最终回答（流式 chunk）
-    REFERENCES = "references"         # 引用来源（所有轮次合并）
-    SEARCH = "search"                 # 联网搜索状态/结果
-    RESULT = "result"                 # Loop 结果摘要
-    ERROR = "error"                   # 错误
-    DONE = "done"                     # 流结束
+    对齐 DeepTutor 的 StreamEventType，按 tool-calling loop 机制补齐事件类型。
+    query_rewrite / search 为兼容旧前端保留，新 loop 不再发射。
+    """
+
+    STAGE_START = "stage_start"        # Loop/轮次开始
+    STAGE_END = "stage_end"            # Loop/轮次结束
+    THINKING = "thinking"              # LLM 推理思考过程（<think> 标签内或 reasoning_content）
+    QUERY_REWRITE = "query_rewrite"    # 改写后的查询（兼容旧前端，新 loop 不发射）
+    OBSERVATION = "observation"        # 检索到的上下文摘要（兼容旧前端）
+    PROGRESS = "progress"              # 状态变更/轮次进度
+    CONTENT = "content"                # 最终回答（流式 chunk）
+    TOOL_CALL = "tool_call"            # LLM 发出工具调用
+    TOOL_RESULT = "tool_result"        # 工具返回结果
+    REFERENCES = "references"          # 引用来源（按轮次或合并）
+    SEARCH = "search"                  # 联网搜索状态/结果（兼容旧前端）
+    SOURCES = "sources"                # 所有轮次合并的来源
+    RESULT = "result"                  # Loop 结果摘要
+    ERROR = "error"                    # 错误
+    WAIT_FOR_INPUT = "wait_for_input"  # ask_user 触发，loop 暂停等待用户回复
+    SESSION = "session"                # 会话 ID 分配
+    SESSION_META = "session_meta"      # 会话元数据
+    DONE = "done"                      # 流结束
 
 
 @dataclass

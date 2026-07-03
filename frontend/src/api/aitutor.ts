@@ -28,7 +28,9 @@ import type {
   GraphData,
   QueryRequest,
   ReferenceItem,
-  LoopEvent
+  LoopEvent,
+  AskUserPayload,
+  SourceItem
 } from './types'
 
 // ---- mock 数据与状态（仅 VITE_USE_MOCK=true 时使用） ----
@@ -519,22 +521,30 @@ function startMockPipeline() {
 
 /**
  * POST /query/stream — NDJSON 流式查询。
- * 逐行解析 {"response":"..."} / {"references":[...]} / {"error":"..."}，
- * 通过 onChunk/onReferences/onError 回调上报。signal 中止可停止。
+ * 逐行解析 AgentLoop StreamEvent，按 type 路由到回调：
+ * - content → onChunk（最终回答）
+ * - references/sources → onReferences
+ * - wait_for_input → onWaitForInput（ask_user 暂停）
+ * - session → onSession
+ * - thinking/observation/progress/tool_call/tool_result/... → onLoopEvent
+ * - error → onError
  *
  * 参考 LightRAG webui `_readNdjsonStream`：fetch + ReadableStream.getReader()。
  */
 export async function queryStream(
   request: QueryRequest,
   callbacks: {
-    onChunk: (text: string) => void
+    onChunk: (text: string, callId?: string) => void
     onReferences?: (refs: ReferenceItem[]) => void
     onError?: (msg: string) => void
     onLoopEvent?: (event: LoopEvent) => void
+    onWaitForInput?: (payload: AskUserPayload) => void
+    onSession?: (sessionId: string) => void
+    onSources?: (sources: SourceItem[]) => void
     signal?: AbortSignal
   }
 ): Promise<void> {
-  const { onChunk, onReferences, onError, onLoopEvent, signal } = callbacks
+  const { onChunk, onReferences, onError, onLoopEvent, onWaitForInput, onSession, onSources, signal } = callbacks
   if (USE_MOCK) {
     return queryStreamMock(request, { onChunk, onReferences, onError, onLoopEvent, signal })
   }
@@ -552,61 +562,149 @@ export async function queryStream(
       onError?.(`查询失败：HTTP ${resp.status}`)
       return
     }
-    const reader = resp.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed) continue
-        try {
-          const parsed = JSON.parse(trimmed)
-          // AgentLoop 事件路由
-          const eventType = parsed.type as string | undefined
-
-          if (eventType === 'content') {
-            // 最终回答 chunk（同现有 onChunk）
-            if (typeof parsed.content === 'string') {
-              onChunk(parsed.content)
-            }
-          } else if (eventType === 'references' && Array.isArray(parsed.references)) {
-            // 引用来源
-            onReferences?.(parsed.references as ReferenceItem[])
-          } else if (eventType === 'error') {
-            onError?.(parsed.content || parsed.error || '查询失败')
-          } else if (eventType === 'done') {
-            // 流结束，无需处理
-          } else if (eventType && onLoopEvent) {
-            // 其他 AgentLoop 事件（thinking, observation, progress, query_rewrite, result, stage_start）
-            onLoopEvent({
-              type: eventType as LoopEvent['type'],
-              round: parsed.round ?? 0,
-              content: parsed.content ?? '',
-              metadata: parsed.metadata ?? {},
-            })
-          } else if (typeof parsed.response === 'string') {
-            // 兼容旧格式（非 AgentLoop 的 LightRAG NDJSON）
-            onChunk(parsed.response)
-          } else if (Array.isArray(parsed.references)) {
-            // 兼容旧格式
-            onReferences?.(parsed.references as ReferenceItem[])
-          } else if (parsed.error) {
-            // 兼容旧格式
-            onError?.(parsed.error)
-          }
-        } catch {
-          /* 跳过无法解析的行 */
-        }
-      }
-    }
+    await _consumeNdjson(resp, {
+      onChunk, onReferences, onError, onLoopEvent, onWaitForInput, onSession, onSources,
+    })
   } catch (err) {
     if ((err as Error).name === 'AbortError') return // 用户主动停止，静默
     onError?.(err instanceof Error ? err.message : String(err))
+  }
+}
+
+/**
+ * POST /query/resume — ask_user 恢复流。
+ * 用户回答 ask_user 问题后，把 answers 发回后端，继续暂停的 loop。
+ * NDJSON 解析逻辑与 queryStream 共用 _consumeNdjson。
+ */
+export async function resumeStream(
+  sessionId: string,
+  answers: Record<string, string>,
+  callbacks: {
+    onChunk: (text: string, callId?: string) => void
+    onReferences?: (refs: ReferenceItem[]) => void
+    onError?: (msg: string) => void
+    onLoopEvent?: (event: LoopEvent) => void
+    onWaitForInput?: (payload: AskUserPayload) => void
+    onSession?: (sessionId: string) => void
+    onSources?: (sources: SourceItem[]) => void
+    signal?: AbortSignal
+  }
+): Promise<void> {
+  const { onChunk, onReferences, onError, onLoopEvent, onWaitForInput, onSession, onSources, signal } = callbacks
+  try {
+    const resp = await fetch(`${backendBaseUrl}/query/resume`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/x-ndjson'
+      },
+      body: JSON.stringify({ session_id: sessionId, answers }),
+      signal
+    })
+    if (!resp.ok || !resp.body) {
+      onError?.(`恢复失败：HTTP ${resp.status}`)
+      return
+    }
+    await _consumeNdjson(resp, {
+      onChunk, onReferences, onError, onLoopEvent, onWaitForInput, onSession, onSources,
+    })
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return
+    onError?.(err instanceof Error ? err.message : String(err))
+  }
+}
+
+/** NDJSON 流消费器：queryStream 与 resumeStream 共用。 */
+async function _consumeNdjson(
+  resp: Response,
+  cb: {
+    onChunk: (text: string, callId?: string) => void
+    onReferences?: (refs: ReferenceItem[]) => void
+    onError?: (msg: string) => void
+    onLoopEvent?: (event: LoopEvent) => void
+    onWaitForInput?: (payload: AskUserPayload) => void
+    onSession?: (sessionId: string) => void
+    onSources?: (sources: SourceItem[]) => void
+  }
+): Promise<void> {
+  const { onChunk, onReferences, onError, onLoopEvent, onWaitForInput, onSession, onSources } = cb
+  const reader = resp.body!.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      try {
+        const parsed = JSON.parse(trimmed)
+        const eventType = parsed.type as string | undefined
+        const metadata = parsed.metadata ?? {}
+        const callId = typeof metadata.call_id === 'string' ? metadata.call_id : undefined
+
+        if (eventType === 'content') {
+          if (typeof parsed.content === 'string') {
+            // onChunk 带 callId，供前端区分 narration 轮 / final 轮
+            onChunk(parsed.content, callId)
+            // 同时作为 loop event 记录，让 trace 能显示 narration preamble
+            if (onLoopEvent) {
+              onLoopEvent({
+                type: 'content',
+                round: parsed.round ?? 0,
+                content: parsed.content,
+                metadata,
+              })
+            }
+          }
+        } else if (eventType === 'references' && Array.isArray(metadata.references)) {
+          onReferences?.(metadata.references as ReferenceItem[])
+        } else if (eventType === 'references' && Array.isArray(parsed.references)) {
+          onReferences?.(parsed.references as ReferenceItem[])
+        } else if (eventType === 'sources' && Array.isArray(metadata.sources)) {
+          onSources?.(metadata.sources as SourceItem[])
+        } else if (eventType === 'wait_for_input') {
+          const payload = metadata.ask_user as AskUserPayload | undefined
+          if (payload && onWaitForInput) onWaitForInput(payload)
+          if (onLoopEvent) {
+            onLoopEvent({
+              type: 'wait_for_input',
+              round: parsed.round ?? 0,
+              content: parsed.content ?? '',
+              metadata,
+            })
+          }
+        } else if (eventType === 'session') {
+          const sid = metadata.session_id as string | undefined
+          if (sid) onSession?.(sid)
+          if (onLoopEvent) {
+            onLoopEvent({ type: 'session', round: 0, content: '', metadata })
+          }
+        } else if (eventType === 'error') {
+          onError?.(parsed.content || parsed.error || '查询失败')
+        } else if (eventType === 'done') {
+          // 流结束
+        } else if (eventType && onLoopEvent) {
+          onLoopEvent({
+            type: eventType as LoopEvent['type'],
+            round: parsed.round ?? 0,
+            content: parsed.content ?? '',
+            metadata,
+          })
+        } else if (typeof parsed.response === 'string') {
+          onChunk(parsed.response)
+        } else if (Array.isArray(parsed.references)) {
+          onReferences?.(parsed.references as ReferenceItem[])
+        } else if (parsed.error) {
+          onError?.(parsed.error)
+        }
+      } catch {
+        /* 跳过无法解析的行 */
+      }
+    }
   }
 }
 

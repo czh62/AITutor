@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import type { ChatMessage as ChatMessageType, StreamEvent } from '@/api/types'
 import ThinkingBlock from '@/components/qa/ThinkingBlock'
+import AskUserCard from '@/components/qa/AskUserCard'
 import { AssistantActivity, loopTraceToEvents } from '@/components/qa/TracePanels'
 import { parseThinking } from '@/lib/parseThinking'
 
@@ -10,11 +11,24 @@ import { parseThinking } from '@/lib/parseThinking'
  * 单条对话（仿 DeepTutor 风格）：
  * - user：右对齐，max-w-75%，rounded-2xl bg-secondary 暖色气泡，纯文本（whitespace-pre-wrap）。
  * - assistant：**无气泡**，全宽左对齐直接渲染 markdown（15px / 行高 1.75），长回答阅读更佳；
- *   渲染管线：AssistantActivity 状态行 → TraceFlow 内联 trace → ThinkingBlock → markdown body → references
+ *   渲染管线（5 层）：
+ *     AssistantActivity 状态行 → TraceFlow 内联 trace
+ *     → AskUserCard（ask_user 暂停时）
+ *     → ThinkingBlock
+ *     → markdown body
+ *     → references
  *   优先使用 traceEvents（新版 StreamEvent[] 门控格式），有 loopTrace 但无 traceEvents 时向后兼容转换。
  * - error：保留淡红气泡以突出错误态（区别于正常 assistant 的无气泡）。
+ *
+ * onAskUserRespond：仅当消息处于 ask_user 暂停态（isWaitingForInput + askUserPayload）时传入，
+ * AskUserCard 渲染并由用户触发回复 → QAPanel 调 /query/resume 继续流。
  */
-export default function ChatMessage({ message }: { message: ChatMessageType }) {
+interface ChatMessageProps {
+  message: ChatMessageType
+  onAskUserRespond?: (answers: Record<string, string>) => void
+}
+
+export default function ChatMessage({ message, onAskUserRespond }: ChatMessageProps) {
   const isUser = message.role === 'user'
 
   if (isUser) {
@@ -74,12 +88,20 @@ export default function ChatMessage({ message }: { message: ChatMessageType }) {
           />
         )}
 
-        {/* 2. ThinkingBlock（推理模型的 <think> 标签内容） */}
+        {/* 2. AskUserCard（ask_user 暂停态：loop 等待用户回复） */}
+        {message.isWaitingForInput && message.askUserPayload && onAskUserRespond && (
+          <AskUserCard
+            payload={message.askUserPayload}
+            onRespond={onAskUserRespond}
+          />
+        )}
+
+        {/* 3. ThinkingBlock（推理模型的 <think> 标签内容） */}
         {parsed?.thinking && (
           <ThinkingBlock thinking={parsed.thinking} streaming={!parsed.thinkingClosed} />
         )}
 
-        {/* 3. Markdown body（回答气泡内容） */}
+        {/* 4. Markdown body（回答气泡内容） */}
         {message.isError ? (
           <div>{message.content}</div>
         ) : parsed?.body ? (

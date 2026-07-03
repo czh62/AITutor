@@ -42,14 +42,17 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_api_version: str = ""
 
-    # AgentLoop
-    agent_loop_max_rounds: int = 3
+    # AgentLoop（tool-calling 模式需更多轮次：检索→搜索→回答可能占 3 轮）
+    agent_loop_max_rounds: int = 6
     agent_loop_temperature: float = 0.3
     agent_loop_max_tokens: int = 4096
 
     # 联网搜索（DuckDuckGo 零配置，无需 API key）
     search_enabled: bool = True
     search_max_results: int = 5
+
+    # 记忆系统（L1 追踪 + L2 摘要，SQLite 存储，随重启清空）
+    memory_consolidation_enabled: bool = True
 
 
 @lru_cache

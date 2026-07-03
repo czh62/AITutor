@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowUpIcon, SquareIcon, EraserIcon, GraduationCapIcon, GlobeIcon } from 'lucide-react'
 import { useQAStore } from '@/stores/qa'
-import { queryStream } from '@/api/aitutor'
+import { queryStream, resumeStream } from '@/api/aitutor'
 import { QUERY_MODE_OPTIONS } from '@/api/types'
-import type { QueryMode, StreamEvent } from '@/api/types'
+import type { AskUserPayload, QueryMode, ReferenceItem, StreamEvent } from '@/api/types'
 import ChatMessage from '@/components/qa/ChatMessage'
 import { cn } from '@/lib/utils'
 
@@ -18,7 +18,9 @@ import { cn } from '@/lib/utils'
 export default function QAPanel() {
   const messages = useQAStore((s) => s.messages)
   const queryMode = useQAStore((s) => s.queryMode)
+  const sessionId = useQAStore((s) => s.sessionId)
   const setQueryMode = useQAStore((s) => s.setQueryMode)
+  const setSessionId = useQAStore((s) => s.setSessionId)
   const addMessage = useQAStore((s) => s.addMessage)
   const updateMessage = useQAStore((s) => s.updateMessage)
   const clearMessages = useQAStore((s) => s.clearMessages)
@@ -46,6 +48,89 @@ export default function QAPanel() {
     ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'
   }, [input])
 
+  // 当前 ask_user 暂停态关联的 assistant 消息 id（resume 时继续往该消息累积）
+  const pendingAssistantIdRef = useRef<string | null>(null)
+
+  /**
+   * 构造流式回调（queryStream / resumeStream 共用）。
+   * 把 content/references/loopEvent/wait_for_input/session 都路由到对应 assistant 消息更新。
+   * onWaitForInput 触发时，记录 pendingAssistantId 供 handleAskUserRespond 使用。
+   */
+  const buildStreamCallbacks = useCallback(
+    (assistantId: string) => {
+      const events: StreamEvent[] = []
+      // 按 callId 收集 content chunks，并记录 narration 轮（有 tool_calls 的轮）
+      // 用于 recompute：最终回答 = 排除 narration 轮的 content（对齐 DeepTutor recomputeAnswerContent）
+      const chunksByCall = new Map<string, string[]>()
+      const chunkOrder: string[] = []
+      const narrationCallIds = new Set<string>()
+
+      const recomputeAnswer = () => {
+        let answer = ''
+        for (const cid of chunkOrder) {
+          if (narrationCallIds.has(cid)) continue
+          answer += (chunksByCall.get(cid) || []).join('')
+        }
+        updateMessage(assistantId, { content: answer })
+      }
+
+      return {
+        callbacks: {
+          onChunk: (chunk: string, callId?: string) => {
+            const cid = callId || '_default'
+            if (!chunksByCall.has(cid)) {
+              chunksByCall.set(cid, [])
+              chunkOrder.push(cid)
+            }
+            chunksByCall.get(cid)!.push(chunk)
+            recomputeAnswer()
+          },
+          onReferences: (refs: ReferenceItem[]) => updateMessage(assistantId, { references: refs }),
+          onError: (msg: string) =>
+            updateMessage(assistantId, { content: msg, isError: true, isStreaming: false }),
+          onLoopEvent: (event: StreamEvent) => {
+            const enriched: StreamEvent = { ...event, timestamp: Date.now() / 1000 }
+            events.push(enriched)
+            // progress complete 且 has_tool_calls=true：标记该 call_id 为 narration 轮
+            if (event.type === 'progress') {
+              const meta = event.metadata as Record<string, unknown>
+              if (meta.call_state === 'complete' && meta.has_tool_calls) {
+                const cid = String(meta.call_id || '')
+                if (cid && !narrationCallIds.has(cid)) {
+                  narrationCallIds.add(cid)
+                  recomputeAnswer()
+                }
+              }
+            }
+            updateMessage(assistantId, { traceEvents: [...events] })
+          },
+          onWaitForInput: (payload: AskUserPayload) => {
+            const enriched: StreamEvent = {
+              type: 'wait_for_input',
+              round: 0,
+              content: payload.context || '需要更多信息',
+              metadata: { ask_user: payload },
+              timestamp: Date.now() / 1000,
+            }
+            events.push(enriched)
+            updateMessage(assistantId, {
+              askUserPayload: payload,
+              isWaitingForInput: true,
+              isStreaming: false,
+              traceEvents: [...events],
+            })
+            pendingAssistantIdRef.current = assistantId
+          },
+          onSession: (sid: string) => setSessionId(sid),
+          onSources: () => {
+            // sources 由 references 回调统一处理，此处仅占位
+          },
+        } as const,
+      }
+    },
+    [updateMessage, setSessionId]
+  )
+
   const handleSend = useCallback(async () => {
     const query = input.trim()
     if (!query || isStreaming) return
@@ -64,37 +149,55 @@ export default function QAPanel() {
     setIsStreaming(true)
     const controller = new AbortController()
     abortRef.current = controller
-    let acc = ''
-    // 直接收集 StreamEvent[]，不再手动拼装 LoopStep
-    const events: StreamEvent[] = []
+
+    const { callbacks } = buildStreamCallbacks(assistantId)
     try {
       await queryStream({ query, mode: queryMode, force_web_search: forceWebSearch }, {
-        onChunk: (chunk) => {
-          acc += chunk
-          updateMessage(assistantId, { content: acc })
-        },
-        onReferences: (refs) => updateMessage(assistantId, { references: refs }),
-        onError: (msg) => updateMessage(assistantId, { content: msg, isError: true }),
-        onLoopEvent: (event) => {
-          // 为事件补充时间戳（后端不提供时由前端补充，供计时器使用）
-          const enriched: StreamEvent = {
-            ...event,
-            timestamp: Date.now() / 1000,
-          }
-          events.push(enriched)
-          // 实时更新消息的 traceEvents（流式渐进）
-          updateMessage(assistantId, { traceEvents: [...events] })
-        },
-        signal: controller.signal
+        ...callbacks,
+        signal: controller.signal,
       })
     } catch {
       /* 已在 queryStream 内通过 onError 上报 */
     } finally {
+      // isWaitingForInput 已在 onWaitForInput 置位；此处统一清 isStreaming
       updateMessage(assistantId, { isStreaming: false })
       setIsStreaming(false)
       abortRef.current = null
     }
-  }, [input, isStreaming, queryMode, forceWebSearch, addMessage, updateMessage])
+  }, [input, isStreaming, queryMode, forceWebSearch, addMessage, updateMessage, buildStreamCallbacks])
+
+  /**
+   * ask_user 回复：用户在 AskUserCard 点击「回复」后，
+   * 把 answers 发到 /query/resume，继续往同一个 assistant 消息累积流。
+   */
+  const handleAskUserRespond = useCallback(
+    async (assistantId: string, answers: Record<string, string>) => {
+      const sid = sessionId
+      if (!sid) return
+      // 清除等待态，恢复 streaming
+      updateMessage(assistantId, {
+        isWaitingForInput: false,
+        askUserPayload: undefined,
+        isStreaming: true,
+      })
+      setIsStreaming(true)
+      const controller = new AbortController()
+      abortRef.current = controller
+
+      const { callbacks } = buildStreamCallbacks(assistantId)
+      try {
+        await resumeStream(sid, answers, { ...callbacks, signal: controller.signal })
+      } catch {
+        /* 已在 resumeStream 内通过 onError 上报 */
+      } finally {
+        updateMessage(assistantId, { isStreaming: false })
+        setIsStreaming(false)
+        pendingAssistantIdRef.current = null
+        abortRef.current = null
+      }
+    },
+    [sessionId, updateMessage, buildStreamCallbacks]
+  )
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort()
@@ -111,7 +214,15 @@ export default function QAPanel() {
         >
           <div className="mx-auto w-full max-w-[960px] space-y-9 px-6 py-6">
           {messages.map((m) => (
-            <ChatMessage key={m.id} message={m} />
+            <ChatMessage
+              key={m.id}
+              message={m}
+              onAskUserRespond={
+                m.isWaitingForInput && m.askUserPayload
+                  ? (answers) => handleAskUserRespond(m.id, answers)
+                  : undefined
+              }
+            />
           ))}
           </div>
         </div>

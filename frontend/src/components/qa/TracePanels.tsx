@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   ChevronDown, BrainCircuit, SearchIcon, GlobeIcon, PencilIcon,
-  BookOpenIcon, Sparkles, CheckCircleIcon
+  BookOpenIcon, Sparkles, CheckCircleIcon, MessageCircleQuestionIcon
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { StreamEvent, LoopEventType } from '@/api/types'
@@ -23,6 +23,14 @@ type TraceMetadata = {
   need_web_search?: boolean
   missing_aspects?: string[]
   rewritten_query?: string
+  // tool_call / tool_result 相关
+  tool_name?: string
+  tool_call_id?: string
+  arguments?: Record<string, unknown>
+  full_content?: string
+  sources_count?: number
+  ask_user?: { questions: Array<{ id: string; text: string; options?: string[] | null }>; context: string }
+  paused?: boolean
 }
 
 function getTraceMeta(event: StreamEvent): TraceMetadata {
@@ -84,6 +92,20 @@ function hasTraceSubstance(events: StreamEvent[]): boolean {
     if (event.type === 'search') {
       return true  // 搜索事件总是有内容
     }
+    if (event.type === 'tool_call' || event.type === 'tool_result') {
+      return true  // 工具调用/结果事件总是有内容
+    }
+    if (event.type === 'wait_for_input') {
+      return true  // ask_user 暂停事件
+    }
+    if (event.type === 'content') {
+      // narration 轮的 preamble 文本（agent_loop_round + narration 角色）
+      const kind = String(getTraceMeta(event).call_kind || '')
+      const role = String(getTraceMeta(event).call_role || '')
+      if (kind === 'agent_loop_round' && role === 'narration' && event.content.trim()) {
+        return true
+      }
+    }
     if (event.type === 'progress') {
       return event.content.trim().length > 0
     }
@@ -133,7 +155,7 @@ type CallKindIcon = {
   label: string  // 中文标签
 }
 
-function describeCallKind(kind: string, role: string, _events: StreamEvent[]): CallKindIcon {
+function describeCallKind(kind: string, role: string, events: StreamEvent[]): CallKindIcon {
   switch (kind) {
     case 'agent_loop_round':
       if (role === 'retrieve') return { icon: SearchIcon, label: '检索' }
@@ -146,8 +168,33 @@ function describeCallKind(kind: string, role: string, _events: StreamEvent[]): C
       return { icon: GlobeIcon, label: '联网搜索' }
     case 'llm_final_response':
       return { icon: CheckCircleIcon, label: '回答' }
+    case 'tool_call':
+      // 按 tool_name 细分图标（rag / web_search / ask_user）
+      return describeToolCall(events)
     default:
       return { icon: Sparkles, label: '推理' }
+  }
+}
+
+/** tool_call 工具行图标（按 tool_name 区分） */
+function describeToolCall(events: StreamEvent[]): CallKindIcon {
+  let toolName = ''
+  for (const e of events) {
+    const name = String(getTraceMeta(e).tool_name || '')
+    if (name) {
+      toolName = name
+      break
+    }
+  }
+  switch (toolName) {
+    case 'rag':
+      return { icon: BookOpenIcon, label: '检索知识库' }
+    case 'web_search':
+      return { icon: GlobeIcon, label: '联网搜索' }
+    case 'ask_user':
+      return { icon: MessageCircleQuestionIcon, label: '向你提问' }
+    default:
+      return { icon: Sparkles, label: '调用工具' }
   }
 }
 
@@ -178,16 +225,42 @@ function getChip(kind: string, role: string, events: StreamEvent[]): string | nu
         }
       }
       return query ? clip(query, 40) : null
+    case 'tool_call':
+      // 工具行 chip：显示工具参数摘要（rag/web_search 的 query，ask_user 的问题数）
+      return getToolCallChip(events)
     default:
       return null
   }
+}
+
+/** tool_call 行的 chip 文本 */
+function getToolCallChip(events: StreamEvent[]): string | null {
+  for (const e of events) {
+    const meta = getTraceMeta(e)
+    const args = meta.arguments as Record<string, unknown> | undefined
+    const toolName = String(meta.tool_name || '')
+    if (e.type === 'tool_call' && args) {
+      if (toolName === 'ask_user') {
+        const qs = args.questions
+        const n = Array.isArray(qs) ? qs.length : 0
+        return n ? `${n} 个问题` : null
+      }
+      const q = typeof args.query === 'string' ? args.query : ''
+      if (q) return clip(q, 40)
+    }
+    if (e.type === 'tool_result') {
+      const cnt = meta.sources_count
+      if (typeof cnt === 'number' && cnt > 0) return `${cnt} 条来源`
+    }
+  }
+  return null
 }
 
 /* ------------------------------------------------------------------ */
 /*  流式模式检测                                                        */
 /* ------------------------------------------------------------------ */
 
-type StreamingMode = 'reasoning' | 'exploring' | 'searching' | 'evaluating' | 'responding' | 'responded'
+type StreamingMode = 'reasoning' | 'exploring' | 'searching' | 'evaluating' | 'tool_calling' | 'waiting' | 'responding' | 'responded'
 
 function detectStreamingMode(events: StreamEvent[], isStreaming: boolean): StreamingMode {
   if (!isStreaming) return 'responded'
@@ -198,9 +271,14 @@ function detectStreamingMode(events: StreamEvent[], isStreaming: boolean): Strea
     const meta = getTraceMeta(event)
     const kind = String(meta.call_kind || '')
 
+    // ask_user 暂停：等待用户回复
+    if (event.type === 'wait_for_input') return 'waiting'
     if (kind === 'llm_final_response' && event.type === 'content') return 'responding'
     if (kind === 'llm_evaluation' && event.type === 'thinking') return 'evaluating'
     if (kind === 'web_search') return 'searching'
+    // tool-calling：工具调用进行中
+    if (event.type === 'tool_call') return 'tool_calling'
+    if (event.type === 'tool_result') return 'tool_calling'
     if (kind === 'agent_loop_round' && event.type === 'observation') return 'exploring'
     if (event.type === 'search') return 'searching'
     if (event.type === 'thinking') return 'evaluating'
@@ -213,6 +291,8 @@ const MODE_LABELS: Record<StreamingMode, string> = {
   exploring: 'AI Tutor 正在检索…',
   searching: 'AI Tutor 正在搜索…',
   evaluating: 'AI Tutor 正在评估…',
+  tool_calling: 'AI Tutor 正在调用工具…',
+  waiting: 'AI Tutor 在等你回复…',
   responding: 'AI Tutor 正在回答…',
   responded: 'AI Tutor 已回答',
 }
@@ -222,6 +302,8 @@ const MODE_ICONS: Record<StreamingMode, typeof Sparkles> = {
   exploring: SearchIcon,
   searching: GlobeIcon,
   evaluating: BrainCircuit,
+  tool_calling: Sparkles,
+  waiting: MessageCircleQuestionIcon,
   responding: CheckCircleIcon,
   responded: CheckCircleIcon,
 }
@@ -308,7 +390,51 @@ function TraceRowItem({
     return ''
   }, [callEvents])
 
-  const canToggle = !isThinking && (thoughtText || observationText || searchResults || progressText)
+  // 工具调用/结果信息（tool_call 行用）
+  const toolInfo = useMemo(() => {
+    let callArgs: string = ''
+    let resultText: string = ''
+    let toolName = ''
+    for (const event of callEvents) {
+      const meta = getTraceMeta(event)
+      if (event.type === 'tool_call') {
+        toolName = String(meta.tool_name || toolName)
+        const args = meta.arguments as Record<string, unknown> | undefined
+        if (args) {
+          if (toolName === 'ask_user') {
+            const qs = Array.isArray(args.questions) ? args.questions : []
+            callArgs = qs.map((q: any, i: number) => `Q${i + 1}: ${q?.text || ''}`).join('\n')
+          } else {
+            const q = typeof args.query === 'string' ? args.query : ''
+            callArgs = q
+          }
+        }
+      }
+      if (event.type === 'tool_result') {
+        toolName = String(meta.tool_name || toolName)
+        const full = meta.full_content
+        resultText = typeof full === 'string' ? full : event.content
+      }
+    }
+    return { toolName, callArgs, resultText }
+  }, [callEvents])
+
+  const isToolRow = kind === 'tool_call'
+  // narration 轮的 preamble 文本（agent_loop_round + narration，非工具行）
+  const narrationText = useMemo(() => {
+    if (isToolRow) return ''
+    return getTraceText(
+      callEvents.filter(
+        (e) =>
+          e.type === 'content' &&
+          String(getTraceMeta(e).call_role || '') === 'narration'
+      ),
+      ['content']
+    )
+  }, [callEvents, isToolRow])
+  const canToggle =
+    !isThinking &&
+    (thoughtText || observationText || searchResults || progressText || (isToolRow && (toolInfo.callArgs || toolInfo.resultText)) || narrationText)
 
   return (
     <div className="group/row">
@@ -377,6 +503,37 @@ function TraceRowItem({
                 思考
               </div>
               <div className="whitespace-pre-wrap break-words">{thoughtText}</div>
+            </div>
+          )}
+
+          {/* narration preamble（工具调用前的说明文本） */}
+          {narrationText && !isToolRow && (
+            <div className="whitespace-pre-wrap break-words text-muted-foreground/80">
+              {clip(narrationText, 200)}
+            </div>
+          )}
+
+          {/* 工具调用参数 */}
+          {isToolRow && toolInfo.callArgs && (
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-semibold tracking-[0.04em] text-muted-foreground/70">
+                {toolInfo.toolName === 'ask_user' ? '问题' : '查询'}
+              </div>
+              <div className="whitespace-pre-wrap break-words text-muted-foreground/80">
+                {clip(toolInfo.callArgs, 200)}
+              </div>
+            </div>
+          )}
+
+          {/* 工具结果 */}
+          {isToolRow && toolInfo.resultText && (
+            <div className="mt-1 space-y-0.5">
+              <div className="text-[10px] font-semibold tracking-[0.04em] text-muted-foreground/70">
+                结果
+              </div>
+              <div className="whitespace-pre-wrap break-words text-muted-foreground/70">
+                {clip(toolInfo.resultText, 400)}
+              </div>
             </div>
           )}
 

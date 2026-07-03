@@ -89,8 +89,9 @@ def get_db() -> Generator[Session, None, None]:
 def init_db() -> None:
     """建表。在 app lifespan 启动时调用。
 
-    当前无业务模型，此处仅确保 engine 可用；后续添加模型时在下方 import 即可。
+    导入业务模型让 Base.metadata 感知它们，create_all 会自动建对应表。
     """
     from ..db.base import Base
+    from ..db import models as _models  # noqa: F401 — 触发模型注册到 Base.metadata
 
     Base.metadata.create_all(bind=engine)
