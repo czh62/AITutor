@@ -1,0 +1,143 @@
+@import 'tailwindcss';
+@import 'katex/dist/katex.min.css';
+@plugin 'tailwindcss-animate';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: #fdfcf9;
+  --foreground: #1c1816;
+  --card: #ffffff;
+  --card-foreground: #1c1816;
+  --popover: #ffffff;
+  --popover-foreground: #1c1816;
+  --primary: #1c1816;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f2ea;
+  --secondary-foreground: #1c1816;
+  --muted: #f1ede2;
+  --muted-foreground: #6d645a;
+  --accent: #ece7d8;
+  --accent-foreground: #1c1816;
+  --destructive: #c53a2c;
+  --destructive-foreground: #ffffff;
+  --border: #e6decc;
+  --input: #e6decc;
+  --ring: #1c1816;
+  --radius: 0.6rem;
+}
+
+.dark {
+  --background: #1a1918;
+  --foreground: #e8e4de;
+  --card: #242220;
+  --card-foreground: #e8e4de;
+  --popover: #242220;
+  --popover-foreground: #e8e4de;
+  --primary: #e8e4de;
+  --primary-foreground: #1a1918;
+  --secondary: #2a2725;
+  --secondary-foreground: #e8e4de;
+  --muted: #2a2725;
+  --muted-foreground: #9b9590;
+  --accent: #302d2a;
+  --accent-foreground: #e8e4de;
+  --destructive: #d44a3c;
+  --destructive-foreground: #ffffff;
+  --border: #3a3634;
+  --input: #3a3634;
+  --ring: #e8e4de;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #d8cdb9;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: #f5f2ea;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: #3a3634;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background-color: #1a1918;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.35s ease-out;
+}
+
+@keyframes dialog-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-dialog-pop-in {
+  animation: dialog-pop-in 0.2s ease-out;
+}
+
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
