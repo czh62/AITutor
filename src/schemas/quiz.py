@@ -48,4 +48,40 @@ class QuizGenerateResponse(BaseModel):
     completed: int = 0
 
 
-__all__ = ["QuizGenerateRequest", "QuizQuestionResponse", "QuizGenerateResponse"]
+class QuizJudgeRequest(BaseModel):
+    """AI 判题请求体。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    question: str
+    question_type: str
+    options: Optional[dict[str, str]] = None
+    correct_answer: str
+    explanation: str
+    user_answer: str
+    language: str = "zh"
+
+
+class QuizFollowupRequest(BaseModel):
+    """追问讲解请求体。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    followup_question: str
+    question: str
+    question_type: str
+    options: Optional[dict[str, str]] = None
+    correct_answer: str
+    explanation: str
+    user_answer: str
+    ai_judgment: Optional[str] = None
+    language: str = "zh"
+
+
+__all__ = [
+    "QuizGenerateRequest",
+    "QuizQuestionResponse",
+    "QuizGenerateResponse",
+    "QuizJudgeRequest",
+    "QuizFollowupRequest",
+]

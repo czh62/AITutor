@@ -34,11 +34,17 @@ class LightRAGClient:
         self._client: httpx.AsyncClient | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
-        """懒创建 httpx.AsyncClient。"""
+        """懒创建 httpx.AsyncClient。
+
+        强制 IPv4（local_address=0.0.0.0），因为 Docker 容器仅监听 127.0.0.1，
+        httpx 默认 DNS 解析 localhost 优先 IPv6 (::1) 导致 Connection refused → 502。
+        """
         if self._client is None:
+            transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
             self._client = httpx.AsyncClient(
                 base_url=self._base_url,
                 timeout=self._timeout,
+                transport=transport,
             )
         return self._client
 

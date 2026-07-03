@@ -123,6 +123,7 @@ class AgentLoop:
             session_id=sid,
             original_query=query,
             mode=mode,
+            web_search_available=force_web_search,
         )
 
         await bus.emit(
@@ -139,7 +140,7 @@ class AgentLoop:
         # 关键：把 loop + finalize 合为一个后台 task
         async def _run_and_finalize() -> None:
             try:
-                outcome = await self._run_loop(ctx, bus)
+                outcome = await self._run_loop(ctx, bus, web_search_available=ctx.web_search_available)
                 await self._finalize(bus, ctx, outcome)
             except Exception as exc:
                 logger.error("loop task failed: %s", exc)
@@ -191,6 +192,9 @@ class AgentLoop:
         )
         ctx = UnifiedContext.from_snapshot(snapshot, system_prompt)
 
+        # 从 snapshot 还原 web_search_available（保证恢复后保持一致）
+        web_search_available = ctx.web_search_available
+
         self._substitute_user_reply(ctx, answers)
         self._clear_paused(session_id)
 
@@ -216,7 +220,7 @@ class AgentLoop:
         # 关键：把 continue_loop + finalize 合为一个后台 task
         async def _resume_and_finalize() -> None:
             try:
-                outcome = await self._continue_loop(ctx, state, bus, start_round=paused_round)
+                outcome = await self._continue_loop(ctx, state, bus, start_round=paused_round, web_search_available=web_search_available)
                 await self._finalize(bus, ctx, outcome)
             except Exception as exc:
                 logger.error("resume task failed: %s", exc)
@@ -242,9 +246,10 @@ class AgentLoop:
         self,
         ctx: UnifiedContext,
         bus: StreamBus,
+        web_search_available: bool = True,
     ) -> LoopOutcome:
         state = AgentLoopState()
-        return await self._continue_loop(ctx, state, bus, start_round=0)
+        return await self._continue_loop(ctx, state, bus, start_round=0, web_search_available=web_search_available)
 
     async def _continue_loop(
         self,
@@ -253,6 +258,7 @@ class AgentLoop:
         bus: StreamBus,
         *,
         start_round: int,
+        web_search_available: bool = True,
     ) -> LoopOutcome:
         """从 start_round 继续运行循环。被 _run_loop 和 resume_stream 共用。"""
         nudged_empty = False
@@ -262,7 +268,8 @@ class AgentLoop:
 
             # 一次流式 LLM 调用（带 tool schemas）
             text_parts, tool_calls = await self._call_llm_streaming(
-                ctx, bus, round=state.round
+                ctx, bus, round=state.round,
+                web_search_available=ctx.web_search_available,
             )
             full_text = "".join(text_parts).strip()
 
@@ -320,6 +327,7 @@ class AgentLoop:
                 state=state,
                 round=state.round,
                 mode=ctx.mode,
+                web_search_available=ctx.web_search_available,
             )
             for tm in outcome.tool_messages:
                 ctx.add_tool_result(tm["tool_call_id"], tm["name"], tm["content"])
@@ -419,13 +427,24 @@ class AgentLoop:
         *,
         round: int,
         with_tools: bool = True,
+        web_search_available: bool = True,
     ) -> tuple[list[str], list[ToolCall]]:
         """一次流式 LLM 调用，发射 thinking/content 事件，返回 (text_parts, tool_calls)。"""
         think_filter = InlineThinkFilter()
         text_parts: list[str] = []
         tool_acc: dict[int, dict[str, Any]] = {}
 
-        tools = TOOL_DEFINITIONS if with_tools else None
+        if with_tools:
+            if web_search_available:
+                tools = TOOL_DEFINITIONS
+            else:
+                # 排除 web_search，只保留 rag + ask_user
+                tools = [
+                    t for t in TOOL_DEFINITIONS
+                    if t["function"]["name"] != "web_search"
+                ]
+        else:
+            tools = None
 
         await bus.emit(
             StreamEventType.PROGRESS,
@@ -621,11 +640,13 @@ class AgentLoop:
         self, bus: StreamBus, ctx: UnifiedContext, outcome: LoopOutcome
     ) -> None:
         """发射 sources + references + result + done。"""
-        if ctx.sources:
+        # 过滤掉 id 或 content 为空的幽灵引用，只发射有效来源
+        valid_sources = [s for s in ctx.sources if s.id and s.content.strip()]
+        if valid_sources:
             await bus.emit(
                 StreamEventType.SOURCES,
                 metadata={
-                    "sources": [_source_to_dict(s) for s in ctx.sources],
+                    "sources": [_source_to_dict(s) for s in valid_sources],
                     "call_id": "loop_summary",
                     "call_kind": "agent_loop",
                 },
@@ -633,7 +654,7 @@ class AgentLoop:
             await bus.emit(
                 StreamEventType.REFERENCES,
                 metadata={
-                    "references": [_source_to_reference(s) for s in ctx.sources],
+                    "references": [_source_to_reference(s) for s in valid_sources],
                     "call_id": "loop_summary",
                     "call_kind": "agent_loop",
                 },

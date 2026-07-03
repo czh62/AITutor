@@ -139,6 +139,7 @@ async def dispatch_tool_calls(
     state: AgentLoopState,
     round: int,
     mode: str = "mix",
+    web_search_available: bool = True,
 ) -> DispatchOutcome:
     """执行一轮工具调用，发射事件，返回 DispatchOutcome。
 
@@ -177,7 +178,7 @@ async def dispatch_tool_calls(
     if normal_calls:
         executed = await asyncio.gather(
             *[
-                _execute_single(tc, lightrag=lightrag, search=search, mode=mode)
+                _execute_single(tc, lightrag=lightrag, search=search, mode=mode, web_search_available=web_search_available)
                 for tc in normal_calls
             ],
             return_exceptions=True,
@@ -273,11 +274,18 @@ async def _execute_single(
     lightrag: LightRAGClient,
     search: SearchClient | None,
     mode: str,
+    web_search_available: bool = True,
 ) -> ToolResult:
     """执行单个普通工具（rag / web_search）。ask_user 不走这里。"""
     if tc.name == "rag":
         return await _exec_rag(tc, lightrag=lightrag, mode=mode)
     if tc.name == "web_search":
+        if not web_search_available:
+            return ToolResult(
+                tool_call_id=tc.id,
+                name="web_search",
+                content="联网搜索未启用（用户未勾选联网搜索按钮）。",
+            )
         return await _exec_web_search(tc, search=search)
     # 未知工具
     return ToolResult(
@@ -418,12 +426,18 @@ def _extract_rag(data: Any) -> tuple[str, list[SourceItem]]:
                     continue
                 rid = str(ref.get("reference_id") or ref.get("id") or "")
                 fpath = str(ref.get("file_path") or "")
+                # 既无 reference_id 也无 file_path → 不可追踪，跳过
+                if not (rid or fpath):
+                    continue
                 cparts = ref.get("content")
                 ctext = ""
                 if isinstance(cparts, list):
                     ctext = " ".join(str(c) for c in cparts)
                 elif isinstance(cparts, str):
                     ctext = cparts
+                # 无实质内容 → 幽灵引用，跳过
+                if not ctext.strip():
+                    continue
                 sources.append(
                     SourceItem(
                         id=rid or fpath,

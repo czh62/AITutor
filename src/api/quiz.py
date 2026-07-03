@@ -1,12 +1,12 @@
-"""出题路由 — QuizService 三阶段出题。
+"""出题路由 — QuizService 三阶段出题 + AI 判题 + 追问讲解。
 
 - POST /quiz/generate          非流式出题（内部运行 QuizService，收集 NDJSON 后返回 JSON）。
 - POST /quiz/generate/stream    NDJSON 流式出题，逐行推送 QuizService 的 StreamEvent。
+- POST /quiz/judge/stream       NDJSON 流式 AI 判题。
+- POST /quiz/followup/stream    NDJSON 流式追问讲解。
 
 StreamEvent 类型沿用 AgentLoop 的 StreamEventType：
 stage_start/progress/content/thinking/result/error/session/done。
-出题相关的 content 事件 metadata 包含 call_kind="quiz_question"，
-前端据此区分出题内容与普通聊天内容。
 """
 
 from __future__ import annotations
@@ -17,8 +17,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from ..schemas.quiz import QuizGenerateRequest, QuizGenerateResponse, QuizQuestionResponse
+from ..schemas.quiz import (
+    QuizGenerateRequest,
+    QuizGenerateResponse,
+    QuizJudgeRequest,
+    QuizFollowupRequest,
+    QuizQuestionResponse,
+)
 from ..services.quiz_service import QuizService
+from ..services.quiz_judge_service import QuizJudgeService
 from ..services.quiz_types import QuizQuestion, quiz_question_to_dict
 from ..core.logging import get_logger
 
@@ -30,6 +37,11 @@ router = APIRouter(tags=["quiz"])
 def get_quiz_service(request: Request) -> QuizService:
     """从 app.state 获取 QuizService。"""
     return request.app.state.quiz_service
+
+
+def get_llm_client(request: Request):
+    """从 app.state 获取 LLMClient。"""
+    return request.app.state.llm_client
 
 
 # ------------------------------------------------------------------
@@ -120,6 +132,68 @@ async def quiz_generate_stream(
             num_questions=request.num_questions,
             difficulty=request.difficulty,
             question_types=request.question_types,
+        ),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+# ------------------------------------------------------------------
+#  3. 流式 AI 判题（NDJSON — QuizJudgeService judge_stream）
+# ------------------------------------------------------------------
+
+@router.post("/quiz/judge/stream")
+async def quiz_judge_stream(
+    request: QuizJudgeRequest,
+    llm: LLMClient = Depends(get_llm_client),
+):
+    """流式 AI 判题：对学习者的作答给出针对性评判。"""
+    judge_service = QuizJudgeService(llm=llm)
+    return StreamingResponse(
+        judge_service.judge_stream(
+            question=request.question,
+            question_type=request.question_type,
+            options=request.options,
+            correct_answer=request.correct_answer,
+            explanation=request.explanation,
+            user_answer=request.user_answer,
+            language=request.language,
+        ),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+# ------------------------------------------------------------------
+#  4. 流式追问讲解（NDJSON — QuizJudgeService followup_stream）
+# ------------------------------------------------------------------
+
+@router.post("/quiz/followup/stream")
+async def quiz_followup_stream(
+    request: QuizFollowupRequest,
+    llm: LLMClient = Depends(get_llm_client),
+):
+    """流式追问讲解：基于题目上下文对学习者追问进行讲解。"""
+    judge_service = QuizJudgeService(llm=llm)
+    return StreamingResponse(
+        judge_service.followup_stream(
+            followup_question=request.followup_question,
+            question=request.question,
+            question_type=request.question_type,
+            options=request.options,
+            correct_answer=request.correct_answer,
+            explanation=request.explanation,
+            user_answer=request.user_answer,
+            ai_judgment=request.ai_judgment,
+            language=request.language,
         ),
         media_type="application/x-ndjson",
         headers={

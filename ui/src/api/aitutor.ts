@@ -32,7 +32,9 @@ import type {
   AskUserPayload,
   SourceItem,
   QuizGenerateRequest,
-  QuizQuestion
+  QuizQuestion,
+  QuizJudgeRequest,
+  QuizFollowupRequest,
 } from './types'
 
 // ---- mock 数据与状态（仅 VITE_USE_MOCK=true 时使用） ----
@@ -883,5 +885,167 @@ export async function quizGenerateStream(
   } catch (err) {
     if ((err as Error).name === 'AbortError') return
     onError?.(err instanceof Error ? err.message : String(err))
+  }
+}
+
+// ============================================================
+//  13. AI 判题流式接口
+// ============================================================
+
+/**
+ * POST /quiz/judge/stream — NDJSON 流式 AI 判题。
+ * 逐行解析 StreamEvent，按 type + metadata.call_kind 路由到回调：
+ * - content + call_kind="quiz_judge" → onChunk（判词文本增量）
+ * - result → onDone（判题完成，携带完整判词）
+ * - error → onError
+ */
+export async function quizJudgeStream(
+  request: QuizJudgeRequest,
+  callbacks: {
+    onChunk: (text: string) => void
+    onDone: (finalText: string) => void
+    onError: (msg: string) => void
+    signal?: AbortSignal
+  }
+): Promise<void> {
+  const { onChunk, onDone, onError, signal } = callbacks
+  try {
+    const resp = await fetch(`${backendBaseUrl}/quiz/judge/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/x-ndjson',
+      },
+      body: JSON.stringify(request),
+      signal,
+    })
+    if (!resp.ok || !resp.body) {
+      onError(`判题失败：HTTP ${resp.status}`)
+      return
+    }
+
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let fullText = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed) continue
+        try {
+          const parsed = JSON.parse(trimmed)
+          const eventType = parsed.type as string | undefined
+          const content = parsed.content ?? ''
+
+          if (eventType === 'content') {
+            const text = typeof content === 'string' ? content : ''
+            if (text) {
+              fullText += text
+              onChunk(text)
+            }
+          } else if (eventType === 'result') {
+            const judgment = parsed.metadata?.judgment as string | undefined
+            if (judgment) fullText = judgment
+            onDone(fullText)
+          } else if (eventType === 'error') {
+            onError(String(content) || '判题失败')
+          } else if (eventType === 'stage_start' || eventType === 'done') {
+            // 忽略
+          }
+        } catch {
+          /* 跳过无法解析的行 */
+        }
+      }
+    }
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return
+    onError(err instanceof Error ? err.message : String(err))
+  }
+}
+
+// ============================================================
+//  14. 追问讲解流式接口
+// ============================================================
+
+/**
+ * POST /quiz/followup/stream — NDJSON 流式追问讲解。
+ * 逐行解析 StreamEvent，按 type + metadata.call_kind 路由到回调：
+ * - content + call_kind="quiz_followup" → onChunk（讲解文本增量）
+ * - result → onDone（讲解完成）
+ * - error → onError
+ */
+export async function quizFollowupStream(
+  request: QuizFollowupRequest,
+  callbacks: {
+    onChunk: (text: string) => void
+    onDone: (finalText: string) => void
+    onError: (msg: string) => void
+    signal?: AbortSignal
+  }
+): Promise<void> {
+  const { onChunk, onDone, onError, signal } = callbacks
+  try {
+    const resp = await fetch(`${backendBaseUrl}/quiz/followup/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/x-ndjson',
+      },
+      body: JSON.stringify(request),
+      signal,
+    })
+    if (!resp.ok || !resp.body) {
+      onError(`追问讲解失败：HTTP ${resp.status}`)
+      return
+    }
+
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let fullText = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed) continue
+        try {
+          const parsed = JSON.parse(trimmed)
+          const eventType = parsed.type as string | undefined
+          const content = parsed.content ?? ''
+
+          if (eventType === 'content') {
+            const text = typeof content === 'string' ? content : ''
+            if (text) {
+              fullText += text
+              onChunk(text)
+            }
+          } else if (eventType === 'result') {
+            const followupAnswer = parsed.metadata?.followup_answer as string | undefined
+            if (followupAnswer) fullText = followupAnswer
+            onDone(fullText)
+          } else if (eventType === 'error') {
+            onError(String(content) || '追问讲解失败')
+          } else if (eventType === 'stage_start' || eventType === 'done') {
+            // 忽略
+          }
+        } catch {
+          /* 跳过无法解析的行 */
+        }
+      }
+    }
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return
+    onError(err instanceof Error ? err.message : String(err))
   }
 }

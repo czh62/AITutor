@@ -249,6 +249,10 @@ export interface ChatMessage {
   isWaitingForInput?: boolean
   // 出题结果：出题流程产出的题目列表
   quizQuestions?: QuizQuestion[]
+  // 作答状态：题号 → 用户的作答（选择/输入）
+  quizAnswers?: Record<number, QuizAnswerState>
+  // AI 判词状态：题号 → 判题结果
+  quizJudgments?: Record<number, QuizJudgmentState>
 }
 
 /** AgentLoop 思维链追踪 */
@@ -360,3 +364,51 @@ export const QUERY_MODE_OPTIONS: { value: QueryMode; label: string }[] = [
   { value: 'naive', label: 'Naive（朴素）' },
   { value: 'bypass', label: 'Bypass（旁路）' }
 ]
+
+// ============================================================
+//  作答 + 判题 + 追问（新增）
+// ============================================================
+
+/** 单题作答状态 */
+export interface QuizAnswerState {
+  /** 选择题/判断题：选中的选项键（A/B/C/D 或 "true"/"false"） */
+  selected: string | null
+  /** 填空题/主观题：输入的文字 */
+  typed: string
+  /** 是否已提交 */
+  submitted: boolean
+}
+
+/** 单题 AI 判词状态 */
+export interface QuizJudgmentState {
+  /** 判词全文（流式追加） */
+  text: string
+  /** 是否正在流式接收 */
+  isStreaming: boolean
+  /** 错误信息 */
+  error: string | null
+}
+
+/** AI 判题请求体（对齐后端 QuizJudgeRequest） */
+export interface QuizJudgeRequest {
+  question: string
+  question_type: string
+  options: Record<string, string> | null
+  correct_answer: string
+  explanation: string
+  user_answer: string
+  language: string
+}
+
+/** 追问讲解请求体（对齐后端 QuizFollowupRequest） */
+export interface QuizFollowupRequest {
+  followup_question: string
+  question: string
+  question_type: string
+  options: Record<string, string> | null
+  correct_answer: string
+  explanation: string
+  user_answer: string
+  ai_judgment: string | null
+  language: string
+}

@@ -84,7 +84,9 @@ export default function QAPanel() {
           recomputeAnswer()
         },
         onReferences: (refs: ReferenceItem[]) =>
-          updateMessage(assistantId, { references: refs }),
+          updateMessage(assistantId, {
+            references: refs.filter(r => r.reference_id || r.file_path)
+          }),
         onError: (message: string) =>
           updateMessage(assistantId, {
             content: message,
