@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import { cn } from '@/lib/utils'
 import type { QuizQuestion } from '@/api/types'
 import { QUIZ_TYPE_LABELS } from '@/api/types'
@@ -40,8 +44,10 @@ export default function QuizCard({ question, ordinal, defaultRevealed = false }:
       </div>
 
       {/* Body — 题面 */}
-      <div className="px-4 py-3 text-sm leading-relaxed text-foreground whitespace-pre-wrap">
-        {question.question}
+      <div className="px-4 py-3 text-sm leading-relaxed text-foreground">
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+          {question.question}
+        </ReactMarkdown>
       </div>
 
       {/* Options (choice type) */}
@@ -61,7 +67,11 @@ export default function QuizCard({ question, ordinal, defaultRevealed = false }:
                 )}
               >
                 <span className="font-semibold text-muted-foreground shrink-0">{key}.</span>
-                <span className="whitespace-pre-wrap">{value}</span>
+                <span className="inline">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {value}
+                  </ReactMarkdown>
+                </span>
               </div>
             )
           })}
@@ -105,7 +115,11 @@ export default function QuizCard({ question, ordinal, defaultRevealed = false }:
             {question.explanation && question.explanation !== 'N/A' && (
               <div>
                 <span className="font-semibold text-muted-foreground">解析：</span>
-                <span className="text-foreground whitespace-pre-wrap">{question.explanation}</span>
+                <span className="text-foreground">
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                  {question.explanation}
+                </ReactMarkdown>
+              </span>
               </div>
             )}
           </div>

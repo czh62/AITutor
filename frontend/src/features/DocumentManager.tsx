@@ -60,9 +60,6 @@ const getDisplayFileName = (doc: DocStatusResponse, maxLength = 24): string => {
   return fileName.length > maxLength ? fileName.slice(0, maxLength) + '...' : fileName
 }
 
-const hasDocumentDetails = (doc: DocStatusResponse): boolean =>
-  Boolean(doc.track_id || doc.error_msg || (doc.metadata && Object.keys(doc.metadata).length > 0))
-
 const formatDocumentDetails = (doc: DocStatusResponse): string => {
   const lines: string[] = []
   if (doc.track_id) lines.push(`Track ID: ${doc.track_id}`)

@@ -1,5 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import { cn } from '@/lib/utils'
 import type { ChatMessage as ChatMessageType, StreamEvent } from '@/api/types'
 import ThinkingBlock from '@/components/qa/ThinkingBlock'
@@ -107,7 +109,7 @@ export default function ChatMessage({ message, onAskUserRespond }: ChatMessagePr
           <div>{message.content}</div>
         ) : parsed?.body ? (
           <>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{parsed.body}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{parsed.body}</ReactMarkdown>
             {message.isStreaming && (
               <span className="ml-0.5 inline-block animate-pulse">▌</span>
             )}
