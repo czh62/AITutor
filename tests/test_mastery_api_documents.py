@@ -1,7 +1,10 @@
+import io
 import sys
 import types
+import unittest
 
 import pytest
+from starlette.datastructures import UploadFile
 
 if "pydantic_settings" not in sys.modules:
     pydantic_settings = types.ModuleType("pydantic_settings")
@@ -29,7 +32,8 @@ if "pydantic_settings" not in sys.modules:
     pydantic_settings.SettingsConfigDict = SettingsConfigDict
     sys.modules["pydantic_settings"] = pydantic_settings
 
-from src.api.documents import validate_mastery_upload_file
+from src.api.documents import upload_document, validate_mastery_upload_file
+from src.core.exceptions import ConflictError
 from src.core.exceptions import ValidationError
 from src.schemas.documents import UploadResult
 
@@ -70,3 +74,108 @@ def test_validate_mastery_upload_file_rejects_unsupported_types(filename, conten
 def test_upload_result_preserves_track_id():
     result = UploadResult(status="success", message="ok", track_id="upload_abc")
     assert result.track_id == "upload_abc"
+
+
+class FakeUploadClient:
+    def __init__(self, raw=None, error=None):
+        self.raw = raw
+        self.error = error
+        self.calls = []
+
+    async def upload_document(self, *, file_name, file_content, content_type):
+        self.calls.append(
+            {
+                "file_name": file_name,
+                "file_content": file_content,
+                "content_type": content_type,
+            }
+        )
+        if self.error is not None:
+            raise self.error
+        return self.raw
+
+
+class FakeMasteryRecorder:
+    def __init__(self):
+        self.calls = []
+
+    def register_upload(self, *, track_id, file_name):
+        self.calls.append({"track_id": track_id, "file_name": file_name})
+
+
+def make_upload_file(name="lesson.md", content_type="text/markdown", content=b"hello"):
+    return UploadFile(filename=name, file=io.BytesIO(content), headers={"content-type": content_type})
+
+
+class UploadDocumentRegistrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_registers_only_for_success_with_track_id(self):
+        client = FakeUploadClient(raw={"status": "success", "message": "ok", "track_id": "track-1"})
+        mastery = FakeMasteryRecorder()
+
+        result = await upload_document(
+            file=make_upload_file(),
+            client=client,
+            mastery=mastery,
+        )
+
+        self.assertEqual(result.track_id, "track-1")
+        self.assertEqual(mastery.calls, [{"track_id": "track-1", "file_name": "lesson.md"}])
+
+    async def test_does_not_register_for_partial_success_or_failure(self):
+        for status in ("partial_success", "failure"):
+            with self.subTest(status=status):
+                client = FakeUploadClient(
+                    raw={"status": status, "message": "done", "track_id": "track-1"}
+                )
+                mastery = FakeMasteryRecorder()
+
+                result = await upload_document(
+                    file=make_upload_file(),
+                    client=client,
+                    mastery=mastery,
+                )
+
+                self.assertEqual(result.status, status)
+                self.assertEqual(mastery.calls, [])
+
+    async def test_does_not_register_when_track_id_missing(self):
+        for raw in (
+            {"status": "success", "message": "ok"},
+            {"status": "success", "message": "ok", "track_id": ""},
+        ):
+            with self.subTest(raw=raw):
+                client = FakeUploadClient(raw=raw)
+                mastery = FakeMasteryRecorder()
+
+                result = await upload_document(
+                    file=make_upload_file(),
+                    client=client,
+                    mastery=mastery,
+                )
+
+                self.assertEqual(result.status, "success")
+                self.assertEqual(mastery.calls, [])
+
+    async def test_does_not_fail_when_mastery_service_absent(self):
+        client = FakeUploadClient(raw={"status": "success", "message": "ok", "track_id": "track-1"})
+
+        result = await upload_document(
+            file=make_upload_file(),
+            client=client,
+            mastery=None,
+        )
+
+        self.assertEqual(result.track_id, "track-1")
+
+    async def test_conflict_does_not_create_mastery_build_job(self):
+        client = FakeUploadClient(error=ConflictError("LightRAG 资源冲突（如文件名重复）"))
+        mastery = FakeMasteryRecorder()
+
+        with self.assertRaises(ConflictError):
+            await upload_document(
+                file=make_upload_file(),
+                client=client,
+                mastery=mastery,
+            )
+
+        self.assertEqual(mastery.calls, [])
