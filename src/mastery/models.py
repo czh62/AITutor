@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,15 +15,10 @@ class KnowledgeType(str, Enum):
 
 
 class ErrorType(str, Enum):
-    BLANK = "blank"
-    INCORRECT = "incorrect"
-
-
-class NextAction(str, Enum):
-    GRADE = "grade"
-    REVIEW = "review"
-    PROBE = "probe"
-    COMPLETE = "complete"
+    KNOWLEDGE_STRUCTURAL = "structural"
+    UNDERSTANDING_DEVIATION = "deviation"
+    APPLICATION_ERROR = "application"
+    METACOGNITIVE = "metacognitive"
 
 
 class KnowledgePoint(BaseModel):
@@ -51,69 +46,72 @@ class LearningModule(BaseModel):
 class RetryAttempt(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    attempted_at: float = Field(default_factory=time.time)
-    user_answer: str = ""
-    correct: bool = False
+    timestamp: float
+    is_correct: bool
+    attempt_number: int
 
 
 class QuizAttempt(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    question_id: str
     knowledge_point_id: str = ""
-    question_type: str = "short"
-    user_answer: str = ""
-    expected_answer: str = ""
-    correct: bool = False
-    attempted_at: float = Field(default_factory=time.time)
+    module_id: str = ""
+    is_correct: bool
+    user_answer: Any = None
     error_type: ErrorType | None = None
-    retry_attempts: list[RetryAttempt] = Field(default_factory=list)
+    self_attribution: str = ""
+    mastery_estimate: float = 0.0
+    timestamp: float = Field(default_factory=time.time)
+    question_type: str = "short"
 
 
 class ErrorRecord(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    id: str
+    question_id: str
     knowledge_point_id: str
-    error_type: ErrorType = ErrorType.INCORRECT
-    active: bool = True
-    retrying: bool = False
+    module_id: str
+    error_type: ErrorType
+    self_attribution: str = ""
+    ai_confirmation: str = ""
+    retry_history: list[RetryAttempt] = Field(default_factory=list)
+    status: Literal["active", "retrying", "review", "graduated"] = "active"
     created_at: float = Field(default_factory=time.time)
-    updated_at: float = Field(default_factory=time.time)
 
 
 class PendingQuestion(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    question_id: str
     knowledge_point_id: str
+    module_id: str = ""
     question_type: str = "short"
     prompt: str = ""
     expected_answer: str = ""
+    options: list[str] = Field(default_factory=list)
     created_at: float = Field(default_factory=time.time)
 
 
 class RepetitionState(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    knowledge_type: KnowledgeType
     interval_index: int = 0
-    next_review_at: float = Field(default_factory=time.time)
-    last_review_at: float | None = None
-    streak: int = 0
+    consecutive_correct: int = 0
+    consecutive_wrong: int = 0
+    next_review_at: float
 
 
 class ReviewTask(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    id: str
     knowledge_point_id: str
     knowledge_type: KnowledgeType
     due_at: float
     priority: int
-
-
-class NextStep(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    action: NextAction
-    knowledge_point_id: str | None = None
+    state: RepetitionState
 
 
 class LearningProgress(BaseModel):

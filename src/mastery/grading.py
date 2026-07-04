@@ -25,5 +25,5 @@ def grade_answer(user_answer: str, expected_answer: str, question_type: str = "s
 
 def classify_error(user_answer: str) -> ErrorType:
     if not _normalize_text(user_answer):
-        return ErrorType.BLANK
-    return ErrorType.INCORRECT
+        return ErrorType.METACOGNITIVE
+    return ErrorType.APPLICATION_ERROR

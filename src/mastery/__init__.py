@@ -6,15 +6,13 @@ from .models import (
     KnowledgeType,
     LearningModule,
     LearningProgress,
-    NextAction,
-    NextStep,
     PendingQuestion,
     QuizAttempt,
     RepetitionState,
     RetryAttempt,
     ReviewTask,
 )
-from .policy import compute_mastery, is_mastered, map_summary, next_objective
+from .policy import NextStep, compute_mastery, is_mastered, map_summary, next_objective
 from .scheduler import SpacedRepetitionScheduler
 
 __all__ = [
@@ -24,7 +22,6 @@ __all__ = [
     "KnowledgeType",
     "LearningModule",
     "LearningProgress",
-    "NextAction",
     "NextStep",
     "PendingQuestion",
     "QuizAttempt",
