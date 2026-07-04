@@ -611,8 +611,8 @@ export async function getMasteryDocuments(): Promise<{ documents: MasteryDocumen
     syncMockMasteryWithDocuments()
     return { documents: mockMasteryDocuments }
   }
-  const resp = await api.get<{ documents: RawMasterySummary[] }>('/mastery/documents')
-  return { documents: resp.data.documents.map(normalizeMasterySummary) }
+  const resp = await api.get<{ documents?: RawMasterySummary[] }>('/mastery/documents')
+  return { documents: Array.isArray(resp.data.documents) ? resp.data.documents.map(normalizeMasterySummary) : [] }
 }
 
 export async function getMasteryDocument(docId: string): Promise<MasteryDocumentDetail> {

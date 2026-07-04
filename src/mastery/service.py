@@ -39,6 +39,70 @@ class MasteryService:
         self._store.save_build_job(job)
         return job
 
+    async def sync_upload_jobs(self) -> None:
+        for job in self._store.list_build_jobs():
+            if job.status in {"ready", "build_failed", "rag_failed"}:
+                continue
+            try:
+                raw = await self._lightrag.get_track_status(job.track_id)
+            except Exception as exc:  # Keep the UI list usable even if LightRAG is temporarily unavailable.
+                job.status = "track_error"
+                job.error = str(exc)
+                self._store.save_build_job(job)
+                continue
+
+            documents = raw.get("documents") if isinstance(raw, dict) else None
+            if not isinstance(documents, list) or not documents:
+                job.status = "waiting_rag"
+                self._store.save_build_job(job)
+                continue
+
+            for document in documents:
+                if not isinstance(document, dict):
+                    continue
+                doc_id = str(document.get("id") or "").strip()
+                if not doc_id:
+                    continue
+                file_path = str(document.get("file_path") or job.file_name or doc_id)
+                rag_status = str(document.get("status") or "pending")
+                progress = self._store.load_progress(doc_id) or LearningProgress(
+                    doc_id=doc_id,
+                    title=Path(file_path).name or job.file_name or doc_id,
+                    source_file=file_path,
+                    build_status="queued",
+                )
+                progress.rag_status = rag_status
+                progress.source_file = progress.source_file or file_path
+                progress.title = progress.title or Path(file_path).name or job.file_name or doc_id
+
+                if rag_status == "failed":
+                    progress.build_status = "rag_failed"
+                    progress.build_error = str(document.get("error_msg") or "LightRAG 文档处理失败")
+                    self._store.save_progress(progress)
+                    job.doc_id = doc_id
+                    job.status = "rag_failed"
+                    job.error = progress.build_error
+                    self._store.save_build_job(job)
+                    continue
+
+                if rag_status != "processed":
+                    progress.build_status = "queued"
+                    self._store.save_progress(progress)
+                    job.doc_id = doc_id
+                    job.status = f"rag_{rag_status}"
+                    self._store.save_build_job(job)
+                    continue
+
+                job.doc_id = doc_id
+                if progress.build_status == "ready":
+                    progress.rag_status = "processed"
+                    self._store.save_progress(progress)
+                    job.status = "ready"
+                    self._store.save_build_job(job)
+                    continue
+
+                await self._build_processed_document(progress, job, file_path)
+
     def list_documents(self) -> list[dict[str, Any]]:
         documents: list[dict[str, Any]] = []
         for progress in self._store.list_progress():
@@ -73,8 +137,14 @@ class MasteryService:
             "next": next_objective(progress).to_dict(),
         }
 
-    def build_document(self, doc_id: str) -> LearningProgress:
-        return self._require_progress(doc_id)
+    async def build_document(self, doc_id: str) -> LearningProgress:
+        progress = self._require_progress(doc_id)
+        if progress.rag_status != "processed":
+            return progress
+        job = next((item for item in self._store.list_build_jobs() if item.doc_id == doc_id), None)
+        if job is None:
+            job = BuildJob(track_id=f"manual_{doc_id}", file_name=progress.source_file, doc_id=doc_id, status="building")
+        return await self._build_processed_document(progress, job, progress.source_file)
 
     def study_knowledge_point(self, doc_id: str, kp_id: str) -> dict[str, Any]:
         progress = self._require_progress(doc_id)
@@ -205,6 +275,61 @@ class MasteryService:
         progress = await self._builder.build_from_text(doc_id, source_file.name, text)
         self._store.save_progress(progress)
         return progress
+
+    async def _build_processed_document(
+        self,
+        progress: LearningProgress,
+        job: BuildJob,
+        file_path: str,
+    ) -> LearningProgress:
+        source_path = self._resolve_source_file(file_path or progress.source_file or job.file_name)
+        progress.rag_status = "processed"
+        progress.build_status = "building"
+        progress.build_error = ""
+        self._store.save_progress(progress)
+        job.status = "building"
+        self._store.save_build_job(job)
+
+        if source_path is None:
+            progress.build_status = "build_failed"
+            progress.build_error = "找不到原始文件，无法构建知识树"
+            self._store.save_progress(progress)
+            job.status = "build_failed"
+            job.error = progress.build_error
+            self._store.save_build_job(job)
+            return progress
+
+        try:
+            built = await self.build_from_file(progress.doc_id, source_path)
+        except Exception as exc:
+            progress.build_status = "build_failed"
+            progress.build_error = str(exc)
+            self._store.save_progress(progress)
+            job.status = "build_failed"
+            job.error = progress.build_error
+            self._store.save_build_job(job)
+            return progress
+
+        built.source_file = file_path or source_path.name
+        built.rag_status = "processed"
+        built.build_status = "ready"
+        self._store.save_progress(built)
+        job.status = "ready"
+        job.error = ""
+        self._store.save_build_job(job)
+        return built
+
+    def _resolve_source_file(self, file_path: str) -> Path | None:
+        candidates = [
+            Path(file_path),
+            Path("data") / "inputs" / Path(file_path).name,
+            Path("data") / "inputs" / "__parsed__" / Path(file_path).name,
+            Path("data") / "uploads" / Path(file_path).name,
+        ]
+        for candidate in candidates:
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        return None
 
     def _require_progress(self, doc_id: str) -> LearningProgress:
         progress = self._store.load_progress(doc_id)

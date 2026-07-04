@@ -213,6 +213,9 @@ class FakeMasteryService:
             }
         ]
 
+    async def sync_upload_jobs(self):
+        return None
+
     def get_document(self, doc_id):
         if doc_id == "missing":
             return None
@@ -237,6 +240,9 @@ class FakeMasteryService:
             "next": {"action": "complete"},
             "map": {"counts": {"total": 1, "mastered": 1, "learning": 0, "new": 0}},
         }
+
+    async def build_document(self, doc_id):
+        return self.progress
 
 
 def test_mastery_documents_route_lists_documents():

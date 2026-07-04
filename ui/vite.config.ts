@@ -18,6 +18,7 @@ export default defineConfig({
       '/health': { target: 'http://localhost:8000', changeOrigin: true },
       '/graphs': { target: 'http://localhost:8000', changeOrigin: true },
       '/graph': { target: 'http://localhost:8000', changeOrigin: true },
+      '/mastery': { target: 'http://localhost:8000', changeOrigin: true },
       '/query': { target: 'http://localhost:8000', changeOrigin: true },
       '/quiz': { target: 'http://localhost:8000', changeOrigin: true }
     }

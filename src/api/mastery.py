@@ -36,6 +36,7 @@ def _require_progress(service: MasteryService, doc_id: str):
 async def list_mastery_documents(
     service: MasteryService = Depends(get_mastery_service),
 ):
+    await service.sync_upload_jobs()
     return MasteryDocumentListResponse(documents=service.list_documents())
 
 
@@ -44,6 +45,7 @@ async def get_mastery_document(
     doc_id: str,
     service: MasteryService = Depends(get_mastery_service),
 ):
+    await service.sync_upload_jobs()
     _require_progress(service, doc_id)
     return service.get_document_payload(doc_id)
 
@@ -56,7 +58,7 @@ async def build_mastery_document(
     progress = _require_progress(service, doc_id)
     if progress.rag_status != "processed":
         raise ValidationError("LightRAG 文档尚未处理完成，不能构建知识树")
-    service.build_document(doc_id)
+    await service.build_document(doc_id)
     return service.get_document_payload(doc_id)
 
 

@@ -6,7 +6,8 @@ import pytest
 
 from src.mastery.builder import MasteryBuilder, normalize_tree_payload
 from src.mastery.extractors import extract_document_text
-from src.mastery.models import LearningProgress
+from src.mastery.models import KnowledgePoint, KnowledgeType, LearningModule, LearningProgress
+from src.mastery.service import MasteryService
 from src.mastery.storage import BuildJob, MasteryStore
 
 
@@ -120,6 +121,40 @@ class FakeLLM:
         return self.response
 
 
+class FakeLightRAG:
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls: list[str] = []
+
+    async def get_track_status(self, track_id):
+        self.calls.append(track_id)
+        return self.payload
+
+
+class FakeBuilder:
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    async def build_from_text(self, doc_id, source_file, text):
+        self.calls.append({"doc_id": doc_id, "source_file": source_file, "text": text})
+        kp = KnowledgePoint(
+            id=f"{doc_id}_m0_kp0",
+            name="核心概念",
+            type=KnowledgeType.CONCEPT,
+            module_id=f"{doc_id}_m0",
+            description="核心概念说明",
+        )
+        module = LearningModule(id=f"{doc_id}_m0", name="基础", order=0, knowledge_points=[kp])
+        return LearningProgress(
+            doc_id=doc_id,
+            title="构建完成",
+            source_file=source_file,
+            rag_status="processed",
+            build_status="ready",
+            modules=[module],
+        )
+
+
 def test_mastery_builder_rejects_blank_and_large_text():
     builder = MasteryBuilder(llm=FakeLLM("{}"), max_source_chars=5)
     with pytest.raises(ValueError, match="empty_content"):
@@ -149,3 +184,86 @@ def test_mastery_builder_parses_fenced_json():
     assert progress.title == "文档"
     assert progress.modules[0].knowledge_points[0].id == "doc-abc_m0_kp0"
     assert llm.calls
+
+
+def test_sync_upload_jobs_creates_processing_progress(tmp_path):
+    store = MasteryStore(root=tmp_path)
+    store.save_build_job(BuildJob(track_id="track-1", file_name="lesson.md"))
+    service = MasteryService(
+        llm=FakeLLM("{}"),
+        lightrag=FakeLightRAG(
+            {
+                "documents": [
+                    {
+                        "id": "doc-1",
+                        "file_path": "lesson.md",
+                        "status": "processing",
+                        "created_at": "2026-01-01T00:00:00Z",
+                        "updated_at": "2026-01-01T00:00:00Z",
+                    }
+                ]
+            }
+        ),
+        store=store,
+        builder=FakeBuilder(),
+    )
+
+    asyncio.run(service.sync_upload_jobs())
+
+    progress = store.load_progress("doc-1")
+    assert progress is not None
+    assert progress.rag_status == "processing"
+    assert progress.build_status == "queued"
+    job = store.load_build_job("track-1")
+    assert job is not None
+    assert job.doc_id == "doc-1"
+
+
+def test_sync_upload_jobs_builds_when_rag_processed(tmp_path):
+    source = tmp_path / "lesson.txt"
+    source.write_text("正文", encoding="utf-8")
+    store = MasteryStore(root=tmp_path / "store")
+    store.save_build_job(BuildJob(track_id="track-1", file_name=source.name))
+    builder = FakeBuilder()
+    service = MasteryService(
+        llm=FakeLLM("{}"),
+        lightrag=FakeLightRAG(
+            {
+                "documents": [
+                    {
+                        "id": "doc-1",
+                        "file_path": str(source),
+                        "status": "processed",
+                        "created_at": "2026-01-01T00:00:00Z",
+                        "updated_at": "2026-01-01T00:00:00Z",
+                    }
+                ]
+            }
+        ),
+        store=store,
+        builder=builder,
+    )
+
+    asyncio.run(service.sync_upload_jobs())
+
+    progress = store.load_progress("doc-1")
+    assert progress is not None
+    assert progress.rag_status == "processed"
+    assert progress.build_status == "ready"
+    assert progress.modules[0].knowledge_points[0].name == "核心概念"
+    assert builder.calls[0]["text"] == "正文"
+
+
+def test_source_resolution_checks_lightrag_parsed_inputs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    parsed = tmp_path / "data" / "inputs" / "__parsed__" / "lesson.txt"
+    parsed.parent.mkdir(parents=True)
+    parsed.write_text("正文", encoding="utf-8")
+    service = MasteryService(
+        llm=FakeLLM("{}"),
+        lightrag=FakeLightRAG({"documents": []}),
+        store=MasteryStore(root=tmp_path / "store"),
+        builder=FakeBuilder(),
+    )
+
+    assert service._resolve_source_file("lesson.txt").resolve() == parsed.resolve()
