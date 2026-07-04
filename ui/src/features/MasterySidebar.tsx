@@ -5,17 +5,24 @@ import {
   CheckCircle2Icon,
   ChevronLeftIcon,
   ClockIcon,
+  HelpCircleIcon,
   Loader2Icon,
+  MessageCircleIcon,
   RefreshCwIcon,
   RotateCcwIcon
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import BuildStatusDialog from '@/components/mastery/BuildStatusDialog'
-import KnowledgePointDialog from '@/components/mastery/KnowledgePointDialog'
 import MasteryTree from '@/components/mastery/MasteryTree'
 import ResetProgressDialog from '@/components/mastery/ResetProgressDialog'
-import ReviewDialog from '@/components/mastery/ReviewDialog'
-import { getMasteryDocument, getMasteryDocuments } from '@/api/aitutor'
+import {
+  getMasteryDocument,
+  getMasteryDocuments,
+  recordKnowledgePointQuizStarted,
+  scheduleKnowledgePointReview,
+  selfAssessKnowledgePoint,
+  startKnowledgePointLearning
+} from '@/api/aitutor'
 import type {
   MasteryBuildStatus,
   MasteryDocumentDetail,
@@ -24,6 +31,7 @@ import type {
   MasteryModule
 } from '@/api/types'
 import { cn } from '@/lib/utils'
+import { useQAStore } from '@/stores/qa'
 import { toast } from 'sonner'
 
 interface MasterySidebarProps {
@@ -38,6 +46,23 @@ const BUILD_STATUS_LABELS: Record<MasteryBuildStatus, string> = {
   ready: '可学习',
   build_failed: '构建失败',
   rag_failed: 'RAG 失败'
+}
+
+function commandId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function detailToSummary(detail: MasteryDocumentDetail): MasteryDocumentSummary {
+  return {
+    doc_id: detail.doc_id,
+    title: detail.title,
+    source_file: detail.source_file,
+    rag_status: detail.rag_status,
+    build_status: detail.build_status,
+    build_error: detail.build_error,
+    updated_at: detail.updated_at,
+    progress: detail.progress
+  }
 }
 
 function getBuildStatus(doc: MasteryDocumentSummary): MasteryBuildStatus {
@@ -130,15 +155,15 @@ function DocumentRow({
 }
 
 export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
+  const enqueueCommand = useQAStore((state) => state.enqueueCommand)
   const [documents, setDocuments] = useState<MasteryDocumentSummary[]>([])
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MasteryDocumentDetail | null>(null)
   const [selectedPoint, setSelectedPoint] = useState<MasteryKnowledgePoint | null>(null)
   const [selectedModule, setSelectedModule] = useState<MasteryModule | null>(null)
-  const [pointDialogOpen, setPointDialogOpen] = useState(false)
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
   const [buildStatusOpen, setBuildStatusOpen] = useState(false)
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
+  const [runningAction, setRunningAction] = useState<string | null>(null)
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const mountedRef = useRef(true)
@@ -195,6 +220,13 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
     await loadDetail(selectedDocument)
   }, [loadDocuments, loadDetail, selectedDocument])
 
+  const applyDetailUpdate = useCallback((updated: MasteryDocumentDetail) => {
+    setDetail(updated)
+    setDocuments((current) =>
+      current.map((doc) => (doc.doc_id === updated.doc_id ? detailToSummary(updated) : doc))
+    )
+  }, [])
+
   useEffect(() => {
     loadDocuments()
   }, [loadDocuments])
@@ -209,15 +241,120 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
     loadDetail(selectedDocument)
   }, [loadDetail, selectedDocument])
 
+  useEffect(() => {
+    setSelectedPoint(null)
+    setSelectedModule(null)
+  }, [selectedDocId])
+
   const readyCount = documents.filter((doc) => getBuildStatus(doc) === 'ready').length
   const canRenderTree = selectedDocument?.rag_status === 'processed' && getBuildStatus(selectedDocument) === 'ready'
-  const selectedPointId = selectedPoint?.id
+  const activeSelection = useMemo(() => {
+    if (!selectedPoint) return null
+    if (!detail) {
+      return selectedModule ? { point: selectedPoint, module: selectedModule } : null
+    }
+    for (const module of detail.modules) {
+      const point = module.knowledge_points.find((candidate) => candidate.id === selectedPoint.id)
+      if (point) return { point, module }
+    }
+    return selectedModule ? { point: selectedPoint, module: selectedModule } : null
+  }, [detail, selectedModule, selectedPoint])
+  const selectedPointId = activeSelection?.point.id ?? selectedPoint?.id
 
-  const handleKnowledgePointClick = (point: MasteryKnowledgePoint, module: MasteryModule) => {
+  const handleKnowledgePointClick = async (point: MasteryKnowledgePoint, module: MasteryModule) => {
+    if (!selectedDocument) return
     setSelectedPoint(point)
     setSelectedModule(module)
-    setPointDialogOpen(true)
+    setRunningAction(`start:${point.id}`)
+    try {
+      const result = await startKnowledgePointLearning(selectedDocument.doc_id, point.id)
+      applyDetailUpdate(result.document)
+      enqueueCommand({
+        id: commandId('mastery-query'),
+        kind: 'query',
+        prompt: result.prompt,
+        metadata: {
+          source: 'mastery',
+          docId: selectedDocument.doc_id,
+          knowledgePointId: point.id
+        }
+      })
+      toast.success('已开始知识点学习')
+    } catch (err) {
+      toast.error(`开始学习失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setRunningAction(null)
+    }
   }
+
+  const handleContinuePoint = useCallback(() => {
+    if (!selectedDocument || !activeSelection) return
+    enqueueCommand({
+      id: commandId('mastery-followup'),
+      kind: 'query',
+      prompt: `我想继续追问刚才的知识点「${activeSelection.point.title}」。请结合当前文档继续带我理解，并先问我一个能暴露理解盲区的问题。`,
+      metadata: {
+        source: 'mastery',
+        docId: selectedDocument.doc_id,
+        knowledgePointId: activeSelection.point.id
+      }
+    })
+  }, [activeSelection, enqueueCommand, selectedDocument])
+
+  const handlePointUnderstood = useCallback(async () => {
+    if (!selectedDocument || !activeSelection) return
+    setRunningAction('understood')
+    try {
+      const updated = await selfAssessKnowledgePoint(selectedDocument.doc_id, activeSelection.point.id, true)
+      applyDetailUpdate(updated)
+      toast.success('已标记为掌握')
+    } catch (err) {
+      toast.error(`更新学习状态失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setRunningAction(null)
+    }
+  }, [activeSelection, applyDetailUpdate, selectedDocument])
+
+  const handlePointQuiz = useCallback(async () => {
+    if (!selectedDocument || !activeSelection) return
+    setRunningAction('quiz')
+    try {
+      const updated = await recordKnowledgePointQuizStarted(selectedDocument.doc_id, activeSelection.point.id)
+      applyDetailUpdate(updated)
+      enqueueCommand({
+        id: commandId('mastery-quiz'),
+        kind: 'quiz',
+        topic: `文档《${selectedDocument.title}》中的知识点「${activeSelection.point.title}」。重点考察：知识点定义、依赖关系、文档中的应用场景。`,
+        num_questions: 3,
+        difficulty: 'auto',
+        question_types: [],
+        metadata: {
+          source: 'mastery',
+          docId: selectedDocument.doc_id,
+          knowledgePointId: activeSelection.point.id
+        }
+      })
+      toast.success('已开始知识点测验')
+    } catch (err) {
+      toast.error(`开始测验失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setRunningAction(null)
+    }
+  }, [activeSelection, applyDetailUpdate, enqueueCommand, selectedDocument])
+
+  const handleReviewLater = useCallback(async () => {
+    if (!selectedDocument || !activeSelection) return
+    setRunningAction('review')
+    try {
+      const updated = await scheduleKnowledgePointReview(selectedDocument.doc_id, activeSelection.point.id)
+      applyDetailUpdate(updated)
+      toast.success('已加入稍后复习')
+    } catch (err) {
+      toast.error(`安排复习失败：${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setRunningAction(null)
+    }
+  }, [activeSelection, applyDetailUpdate, selectedDocument])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -322,16 +459,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                     <p className="text-muted-foreground">复习</p>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setReviewDialogOpen(true)}
-                    className="px-2 text-xs"
-                  >
-                    <ClockIcon className="h-3.5 w-3.5" />
-                    复习
-                  </Button>
+                <div className="mt-3 grid grid-cols-2 gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -352,6 +480,66 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                 </div>
               </div>
 
+              {activeSelection && (
+                <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {activeSelection.point.title}
+                      </p>
+                      <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                        {activeSelection.point.description}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-md bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                      {activeSelection.point.mastery_level}%
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="px-2 text-xs"
+                      onClick={handleContinuePoint}
+                      disabled={Boolean(runningAction)}
+                    >
+                      <MessageCircleIcon className="h-3.5 w-3.5" />
+                      继续追问
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="px-2 text-xs"
+                      onClick={handlePointUnderstood}
+                      disabled={Boolean(runningAction)}
+                    >
+                      <CheckCircle2Icon className="h-3.5 w-3.5" />
+                      我理解了
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="px-2 text-xs"
+                      onClick={handlePointQuiz}
+                      disabled={Boolean(runningAction)}
+                    >
+                      <HelpCircleIcon className="h-3.5 w-3.5" />
+                      出题测验
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="px-2 text-xs"
+                      onClick={handleReviewLater}
+                      disabled={Boolean(runningAction)}
+                    >
+                      <ClockIcon className="h-3.5 w-3.5" />
+                      稍后复习
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-3">
                 <MasteryTree
                   modules={detail.modules}
@@ -365,21 +553,6 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
           )}
         </div>
       </div>
-      <KnowledgePointDialog
-        open={pointDialogOpen}
-        onOpenChange={setPointDialogOpen}
-        docId={selectedDocument?.doc_id ?? ''}
-        module={selectedModule}
-        knowledgePoint={selectedPoint}
-        onChanged={refreshMastery}
-      />
-      <ReviewDialog
-        open={reviewDialogOpen}
-        onOpenChange={setReviewDialogOpen}
-        docId={selectedDocument?.doc_id ?? ''}
-        detail={detail}
-        onChanged={refreshMastery}
-      />
       <BuildStatusDialog
         open={buildStatusOpen}
         onOpenChange={setBuildStatusOpen}

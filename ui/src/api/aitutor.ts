@@ -34,6 +34,7 @@ import type {
   MasteryModule,
   MasteryNextStep,
   MasteryQuizResponse,
+  StartKnowledgePointLearningResponse,
   MasteryStudyResponse,
   QueryRequest,
   ReferenceItem,
@@ -678,6 +679,118 @@ export async function studyKnowledgePoint(
     study_prompt: resp.data.explanation,
     next_step: normalizeNextStep()
   }
+}
+
+function markMockKnowledgePoint(
+  docId: string,
+  knowledgePointId: string,
+  patch: Partial<MasteryKnowledgePoint>
+): MasteryDocumentDetail {
+  const detail = getMockMasteryDetail(docId)
+  detail.modules = detail.modules.map((module) => ({
+    ...module,
+    knowledge_points: module.knowledge_points.map((point) =>
+      point.id === knowledgePointId ? { ...point, ...patch } : point
+    )
+  }))
+  return detail
+}
+
+export async function startKnowledgePointLearning(
+  docId: string,
+  knowledgePointId: string
+): Promise<StartKnowledgePointLearningResponse> {
+  if (USE_MOCK) {
+    await delay(180)
+    const detail = markMockKnowledgePoint(docId, knowledgePointId, {
+      status: 'learning',
+      mastery_level: 10,
+      mastery: 0.1
+    })
+    const point = findMockKnowledgePoint(detail, knowledgePointId)
+    return {
+      doc_id: docId,
+      knowledge_point_id: knowledgePointId,
+      prompt: [
+        `请作为一位耐心的导师，带我学习文档《${detail.title}》中的知识点「${point.title}」。`,
+        `先用文档语境解释它是什么、为什么重要、依赖哪些前置概念，再问我一个开放问题确认我是否理解。`,
+        `知识点描述：${point.description}`
+      ].join('\n'),
+      document: detail
+    }
+  }
+  const resp = await api.post<{
+    doc_id: string
+    knowledge_point_id: string
+    prompt: string
+    document: RawMasteryDetail
+  }>(
+    `/mastery/documents/${encodeURIComponent(docId)}/points/${encodeURIComponent(knowledgePointId)}/start`
+  )
+  return {
+    doc_id: resp.data.doc_id,
+    knowledge_point_id: resp.data.knowledge_point_id,
+    prompt: resp.data.prompt,
+    document: normalizeMasteryDetail(resp.data.document)
+  }
+}
+
+export async function selfAssessKnowledgePoint(
+  docId: string,
+  knowledgePointId: string,
+  passed: boolean,
+  note = ''
+): Promise<MasteryDocumentDetail> {
+  if (USE_MOCK) {
+    await delay(160)
+    return markMockKnowledgePoint(docId, knowledgePointId, {
+      status: passed ? 'mastered' : 'learning',
+      mastery_level: passed ? 100 : 40,
+      mastery: passed ? 1 : 0.4
+    })
+  }
+  const resp = await api.post<RawMasteryDetail>(
+    `/mastery/documents/${encodeURIComponent(docId)}/points/${encodeURIComponent(knowledgePointId)}/self-assess`,
+    { passed, note }
+  )
+  return normalizeMasteryDetail(resp.data)
+}
+
+export async function recordKnowledgePointQuizStarted(
+  docId: string,
+  knowledgePointId: string
+): Promise<MasteryDocumentDetail> {
+  if (USE_MOCK) {
+    await delay(140)
+    return markMockKnowledgePoint(docId, knowledgePointId, {
+      status: 'learning',
+      mastery_level: 20,
+      mastery: 0.2
+    })
+  }
+  const resp = await api.post<RawMasteryDetail>(
+    `/mastery/documents/${encodeURIComponent(docId)}/points/${encodeURIComponent(knowledgePointId)}/quiz-started`
+  )
+  return normalizeMasteryDetail(resp.data)
+}
+
+export async function scheduleKnowledgePointReview(
+  docId: string,
+  knowledgePointId: string
+): Promise<MasteryDocumentDetail> {
+  if (USE_MOCK) {
+    await delay(140)
+    return markMockKnowledgePoint(docId, knowledgePointId, {
+      status: 'learning',
+      mastery_level: 20,
+      mastery: 0.2,
+      review_due: new Date().toISOString()
+    })
+  }
+  const resp = await api.post<RawMasteryDetail>(
+    `/mastery/documents/${encodeURIComponent(docId)}/points/${encodeURIComponent(knowledgePointId)}/review-later`
+  )
+  return normalizeMasteryDetail(resp.data)
 }
 
 export async function createMasteryQuiz(

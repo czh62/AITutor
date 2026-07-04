@@ -270,6 +270,13 @@ export interface MasteryStudyResponse {
   next_step: MasteryNextStep
 }
 
+export interface StartKnowledgePointLearningResponse {
+  doc_id: string
+  knowledge_point_id: string
+  prompt: string
+  document: MasteryDocumentDetail
+}
+
 export interface MasteryQuizResponse {
   question_id?: string
   knowledge_point_id: string
