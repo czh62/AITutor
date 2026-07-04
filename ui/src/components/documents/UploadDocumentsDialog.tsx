@@ -20,6 +20,15 @@ interface UploadDocumentsDialogProps {
   onUploadBatchAccepted?: () => void
 }
 
+const DOCUMENT_UPLOAD_ACCEPT = {
+  'text/plain': ['.txt'],
+  'text/markdown': ['.md'],
+  'application/pdf': ['.pdf'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
+}
+const DOCUMENT_UPLOAD_EXTENSIONS = ['.txt', '.md', '.pdf', '.docx']
+const DOCUMENT_TYPE_ERROR = '仅支持 TXT、MD、PDF、DOCX 文件'
+
 export default function UploadDocumentsDialog({
   onDocumentsUploaded,
   onUploadBatchAccepted
@@ -32,7 +41,7 @@ export default function UploadDocumentsDialog({
   const handleRejected = useCallback((rejected: FileRejection[]) => {
     rejected.forEach(({ file, errors }) => {
       let msg = errors[0]?.message || `文件 ${file.name} 被拒绝`
-      if (msg.includes('file-invalid-type')) msg = '不支持的文件类型'
+      if (msg.includes('file-invalid-type')) msg = DOCUMENT_TYPE_ERROR
       if (msg.includes('file-too-large')) msg = '文件过大'
       setProgresses((p) => ({ ...p, [file.name]: 100 }))
       setFileErrors((p) => ({ ...p, [file.name]: msg }))
@@ -113,7 +122,9 @@ export default function UploadDocumentsDialog({
         </DialogHeader>
         <FileUploader
           maxSize={200 * 1024 * 1024}
-          description="支持 TXT, MD, PDF, DOCX, PPTX, XLSX, JSON, CSV, HTML, EPUB 等，单文件最大 200MB"
+          description="仅支持 TXT、MD、PDF、DOCX 文件，单文件最大 200MB"
+          accept={DOCUMENT_UPLOAD_ACCEPT}
+          extensions={DOCUMENT_UPLOAD_EXTENSIONS}
           onUpload={handleUpload}
           onReject={handleRejected}
           progresses={progresses}

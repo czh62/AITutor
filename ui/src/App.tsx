@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Toaster } from 'sonner'
-import ActivityBar from '@/components/ActivityBar'
+import ActivityBar, { type SidebarMode } from '@/components/ActivityBar'
 import DocumentManager from '@/features/DocumentManager'
 import GraphViewer from '@/features/GraphViewer'
+import MasterySidebar from '@/features/MasterySidebar'
 import QAPanel from '@/features/QAPanel'
 import SiteHeader, { type AppTab } from '@/features/SiteHeader'
 import { useResizableWidth } from '@/hooks/useResizableWidth'
@@ -11,6 +12,7 @@ import { cn } from '@/lib/utils'
 export default function App() {
   const [tab, setTab] = useState<AppTab>('qa')
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('documents')
   const { width: leftWidth, resizerProps } = useResizableWidth({
     initial: 360,
     min: 260,
@@ -27,6 +29,11 @@ export default function App() {
             <div className="flex h-full w-full">
               <ActivityBar
                 sidebarOpen={sidebarOpen}
+                activeMode={sidebarMode}
+                onModeChange={(mode) => {
+                  setSidebarMode(mode)
+                  setSidebarOpen(true)
+                }}
                 onToggleSidebar={() => setSidebarOpen((open) => !open)}
               />
               <aside
@@ -36,7 +43,11 @@ export default function App() {
                   sidebarOpen && 'border-r border-border/40'
                 )}
               >
-                <DocumentManager onCollapse={() => setSidebarOpen(false)} />
+                {sidebarMode === 'documents' ? (
+                  <DocumentManager onCollapse={() => setSidebarOpen(false)} />
+                ) : (
+                  <MasterySidebar onCollapse={() => setSidebarOpen(false)} />
+                )}
               </aside>
               {sidebarOpen && (
                 <div

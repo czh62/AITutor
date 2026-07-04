@@ -26,6 +26,15 @@ import type {
   ClearDocumentsResult,
   DeleteDocumentsResult,
   GraphData,
+  MasteryAssessResponse,
+  MasteryDocumentDetail,
+  MasteryDocumentSummary,
+  MasteryGradeResponse,
+  MasteryKnowledgePoint,
+  MasteryModule,
+  MasteryNextStep,
+  MasteryQuizResponse,
+  MasteryStudyResponse,
   QueryRequest,
   ReferenceItem,
   LoopEvent,
@@ -214,6 +223,10 @@ async function uploadDocumentMock(
     metadata: { source: 'upload', size: file.size }
   }
   mockStore = [newDoc, ...mockStore]
+  mockMasteryDocuments = [
+    createMockMasterySummary(newDoc.id, file.name, 'waiting_rag', 'pending'),
+    ...mockMasteryDocuments
+  ]
   pushHistory(`[上传] ${file.name} 已加入处理队列`)
   setTimeout(() => {
     const target = mockStore.find((d) => d.id === newDoc.id)
@@ -223,7 +236,7 @@ async function uploadDocumentMock(
     }
     beginMockJob(`上传 ${file.name}`)
   }, 800)
-  return { status: 'success', message: `${file.name} 上传成功` }
+  return { status: 'success', message: `${file.name} 上传成功`, track_id: newDoc.id }
 }
 
 // ============================================================
@@ -446,6 +459,260 @@ export async function searchLabels(query: string, limit: number = 50): Promise<s
     params: { q: query, limit }
   })
   return resp.data
+}
+
+// ============================================================
+//  11. 知识点学习路径
+// ============================================================
+
+export async function getMasteryDocuments(): Promise<{ documents: MasteryDocumentSummary[] }> {
+  if (USE_MOCK) {
+    await delay(160)
+    syncMockMasteryWithDocuments()
+    return { documents: mockMasteryDocuments }
+  }
+  const resp = await api.get<{ documents: MasteryDocumentSummary[] }>('/mastery/documents')
+  return resp.data
+}
+
+export async function getMasteryDocument(docId: string): Promise<MasteryDocumentDetail> {
+  if (USE_MOCK) {
+    await delay(160)
+    return getMockMasteryDetail(docId)
+  }
+  const resp = await api.get<MasteryDocumentDetail>(`/mastery/documents/${encodeURIComponent(docId)}`)
+  return resp.data
+}
+
+export async function buildMasteryDocument(docId: string): Promise<MasteryDocumentDetail> {
+  if (USE_MOCK) {
+    await delay(300)
+    const detail = getMockMasteryDetail(docId)
+    detail.build_status = 'ready'
+    return detail
+  }
+  const resp = await api.post<MasteryDocumentDetail>(`/mastery/documents/${encodeURIComponent(docId)}/build`)
+  return resp.data
+}
+
+export async function studyKnowledgePoint(
+  docId: string,
+  knowledgePointId: string
+): Promise<MasteryStudyResponse> {
+  if (USE_MOCK) {
+    await delay(180)
+    const detail = getMockMasteryDetail(docId)
+    const knowledgePoint = findMockKnowledgePoint(detail, knowledgePointId)
+    return {
+      knowledge_point: knowledgePoint,
+      study_prompt: `请用自己的话解释「${knowledgePoint.title}」，并说明它在文档中的作用。`,
+      next_step: detail.next_step
+    }
+  }
+  const resp = await api.post<MasteryStudyResponse>(
+    `/mastery/documents/${encodeURIComponent(docId)}/study/${encodeURIComponent(knowledgePointId)}`
+  )
+  return resp.data
+}
+
+export async function createMasteryQuiz(
+  docId: string,
+  knowledgePointId: string
+): Promise<MasteryQuizResponse> {
+  if (USE_MOCK) {
+    await delay(180)
+    const detail = getMockMasteryDetail(docId)
+    const knowledgePoint = findMockKnowledgePoint(detail, knowledgePointId)
+    return {
+      knowledge_point_id: knowledgePoint.id,
+      question: `请说明「${knowledgePoint.title}」的核心概念，并举一个应用场景。`,
+      expected_points: ['定义准确', '能解释依赖关系', '能给出例子'],
+      next_step: detail.next_step
+    }
+  }
+  const resp = await api.post<MasteryQuizResponse>(
+    `/mastery/documents/${encodeURIComponent(docId)}/quiz/${encodeURIComponent(knowledgePointId)}`
+  )
+  return resp.data
+}
+
+export async function gradeMasteryAnswer(
+  docId: string,
+  answer: string
+): Promise<MasteryGradeResponse> {
+  if (USE_MOCK) {
+    await delay(220)
+    return {
+      passed: answer.trim().length >= 24,
+      score: answer.trim().length >= 24 ? 82 : 45,
+      feedback: answer.trim().length >= 24 ? '回答覆盖了关键点。' : '回答还需要补充定义和应用例子。',
+      retry_question: answer.trim().length >= 24 ? null : '再用一个具体例子解释这个知识点。',
+      next_step: mockNextStep,
+      document: getMockMasteryDetail(docId)
+    }
+  }
+  const resp = await api.post<MasteryGradeResponse>(
+    `/mastery/documents/${encodeURIComponent(docId)}/grade`,
+    { answer }
+  )
+  return resp.data
+}
+
+export async function assessKnowledgePoint(
+  docId: string,
+  knowledgePointId: string,
+  passed: boolean,
+  feedback?: string
+): Promise<MasteryAssessResponse> {
+  if (USE_MOCK) {
+    await delay(180)
+    return {
+      passed,
+      next_step: mockNextStep,
+      document: getMockMasteryDetail(docId)
+    }
+  }
+  const resp = await api.post<MasteryAssessResponse>(
+    `/mastery/documents/${encodeURIComponent(docId)}/assess`,
+    { knowledge_point_id: knowledgePointId, passed, feedback }
+  )
+  return resp.data
+}
+
+export async function resetMasteryDocument(docId: string): Promise<MasteryDocumentDetail> {
+  if (USE_MOCK) {
+    await delay(180)
+    return getMockMasteryDetail(docId)
+  }
+  const resp = await api.post<MasteryDocumentDetail>(`/mastery/documents/${encodeURIComponent(docId)}/reset`)
+  return resp.data
+}
+
+export async function deleteMasteryDocument(docId: string): Promise<{ status: 'success' }> {
+  if (USE_MOCK) {
+    await delay(180)
+    mockMasteryDocuments = mockMasteryDocuments.filter((doc) => doc.doc_id !== docId)
+    return { status: 'success' }
+  }
+  const resp = await api.delete<{ status: 'success' }>(`/mastery/documents/${encodeURIComponent(docId)}`)
+  return resp.data
+}
+
+const mockNextStep: MasteryNextStep = {
+  action: 'practice',
+  module_id: 'mock_m1',
+  module_title: '文档理解基础',
+  knowledge_point_id: 'mock_m1_kp2',
+  knowledge_point_title: '核心概念关系',
+  reason: '继续巩固当前模块的依赖关系',
+  prompt: '请选择一个未掌握的知识点继续学习。'
+}
+
+function createMockMasterySummary(
+  docId: string,
+  sourceFile: string,
+  buildStatus: MasteryDocumentSummary['build_status'],
+  ragStatus: DocStatus
+): MasteryDocumentSummary {
+  return {
+    doc_id: docId,
+    title: sourceFile.replace(/\.[^.]+$/, ''),
+    source_file: sourceFile,
+    rag_status: ragStatus,
+    build_status: buildStatus,
+    build_error: null,
+    updated_at: new Date().toISOString(),
+    progress: {
+      counts: { mastered: 1, learning: 2, new: 3, total: 6 },
+      due_reviews: 1,
+      complete: false
+    }
+  }
+}
+
+let mockMasteryDocuments: MasteryDocumentSummary[] = [
+  createMockMasterySummary('mock-doc-1', 'DeepTutor 设计理念.md', 'ready', 'processed'),
+  createMockMasterySummary('mock-doc-2', 'LightRAG 接入说明.pdf', 'waiting_rag', 'processing')
+]
+
+const mockMasteryModules: MasteryModule[] = [
+  {
+    id: 'mock_m1',
+    title: '文档理解基础',
+    summary: '建立学习路线所需的概念和依赖关系。',
+    knowledge_points: [
+      {
+        id: 'mock_m1_kp1',
+        title: '主题识别',
+        description: '从文档中提取核心主题、目标读者和章节结构。',
+        knowledge_type: 'concept',
+        status: 'mastered',
+        mastery_level: 90,
+        dependencies: [],
+        review_due: new Date().toISOString(),
+        has_pending_question: false
+      },
+      {
+        id: 'mock_m1_kp2',
+        title: '核心概念关系',
+        description: '理解概念之间的前置、包含和应用关系。',
+        knowledge_type: 'procedure',
+        status: 'learning',
+        mastery_level: 54,
+        dependencies: ['mock_m1_kp1'],
+        review_due: null,
+        has_pending_question: true
+      },
+      {
+        id: 'mock_m1_kp3',
+        title: '学习目标拆解',
+        description: '将知识点拆分为可练习、可测验、可复习的学习目标。',
+        knowledge_type: 'design',
+        status: 'new',
+        mastery_level: 0,
+        dependencies: ['mock_m1_kp2'],
+        review_due: null,
+        has_pending_question: false
+      }
+    ]
+  }
+]
+
+function syncMockMasteryWithDocuments() {
+  const existing = new Set(mockMasteryDocuments.map((doc) => doc.doc_id))
+  const additions = mockStore
+    .filter((doc) => !existing.has(doc.id))
+    .map((doc) => createMockMasterySummary(
+      doc.id,
+      doc.file_path,
+      doc.status === 'processed' || doc.status === 'preprocessed' ? 'ready' : doc.status === 'failed' ? 'rag_failed' : 'waiting_rag',
+      doc.status
+    ))
+  if (additions.length > 0) {
+    mockMasteryDocuments = [...additions, ...mockMasteryDocuments]
+  }
+}
+
+function getMockMasteryDetail(docId: string): MasteryDocumentDetail {
+  syncMockMasteryWithDocuments()
+  const summary = mockMasteryDocuments.find((doc) => doc.doc_id === docId) ?? mockMasteryDocuments[0]
+  return {
+    ...summary,
+    modules: summary.build_status === 'ready' ? mockMasteryModules : [],
+    next_step: mockNextStep,
+    build_warnings: []
+  }
+}
+
+function findMockKnowledgePoint(
+  detail: MasteryDocumentDetail,
+  knowledgePointId: string
+): MasteryKnowledgePoint {
+  return (
+    detail.modules
+      .flatMap((module) => module.knowledge_points)
+      .find((point) => point.id === knowledgePointId) ?? mockMasteryModules[0].knowledge_points[0]
+  )
 }
 
 // ============================================================

@@ -8,6 +8,8 @@ interface FileUploaderProps {
   maxFileCount?: number
   maxSize: number
   description: string
+  accept?: Record<string, string[]>
+  extensions?: string[]
   onUpload: (files: File[]) => void
   onReject: (rejected: FileRejection[]) => void
   progresses: Record<string, number>
@@ -16,10 +18,19 @@ interface FileUploaderProps {
 }
 
 const ALL_EXTENSIONS = Object.values(supportedFileTypes).flat()
+const DEFAULT_ACCEPT = Object.entries(supportedFileTypes).reduce(
+  (acc, [mime, exts]) => {
+    acc[mime] = exts
+    return acc
+  },
+  {} as Record<string, string[]>
+)
 
 export default function FileUploader({
   maxSize,
   description,
+  accept,
+  extensions,
   onUpload,
   onReject,
   progresses,
@@ -42,13 +53,7 @@ export default function FileUploader({
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     maxSize,
-    accept: Object.entries(supportedFileTypes).reduce(
-      (acc, [mime, exts]) => {
-        acc[mime] = exts
-        return acc
-      },
-      {} as Record<string, string[]>
-    ),
+    accept: accept ?? DEFAULT_ACCEPT,
     disabled,
     multiple: true
   })
@@ -121,7 +126,10 @@ export default function FileUploader({
         </ul>
       )}
 
-      <p className="text-xs text-muted-foreground">支持扩展名：{ALL_EXTENSIONS.slice(0, 12).join(', ')}…</p>
+      <p className="text-xs text-muted-foreground">
+        支持扩展名：{(extensions ?? ALL_EXTENSIONS).slice(0, 12).join(', ')}
+        {(extensions ?? ALL_EXTENSIONS).length > 12 ? '…' : ''}
+      </p>
     </div>
   )
 }

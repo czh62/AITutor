@@ -65,6 +65,7 @@ export interface DocumentsPaginatedResponse {
 export interface UploadResult {
   status: 'success' | 'partial_success' | 'failure'
   message: string
+  track_id?: string
 }
 
 /** 扫描/重试结果（对齐 LightRAG ScanResponse） */
@@ -161,6 +162,106 @@ export interface GraphEdge {
 export interface GraphData {
   nodes: GraphNode[]
   edges: GraphEdge[]
+}
+
+// ============================================================
+//  知识点学习路径（对齐后端 src/schemas/mastery.py）
+// ============================================================
+
+export type MasteryBuildStatus = 'waiting_rag' | 'building' | 'ready' | 'build_failed' | 'rag_failed'
+export type MasteryKnowledgeType = 'memory' | 'concept' | 'procedure' | 'design'
+export type MasteryObjectiveStatus = 'new' | 'learning' | 'mastered'
+export type MasteryNextStepAction =
+  | 'answer_pending'
+  | 'review'
+  | 'probe'
+  | 'practice'
+  | 'assess'
+  | 'complete'
+
+export interface MasteryProgressSummary {
+  counts: {
+    mastered: number
+    learning: number
+    new: number
+    total: number
+  }
+  due_reviews: number
+  complete: boolean
+}
+
+export interface MasteryDocumentSummary {
+  doc_id: string
+  title: string
+  source_file: string
+  rag_status: DocStatus
+  build_status: MasteryBuildStatus
+  build_error?: string | null
+  updated_at: string
+  progress: MasteryProgressSummary
+}
+
+export interface MasteryKnowledgePoint {
+  id: string
+  title: string
+  description: string
+  knowledge_type: MasteryKnowledgeType
+  status: MasteryObjectiveStatus
+  mastery_level: number
+  dependencies: string[]
+  review_due?: string | null
+  has_pending_question: boolean
+}
+
+export interface MasteryModule {
+  id: string
+  title: string
+  summary: string
+  knowledge_points: MasteryKnowledgePoint[]
+}
+
+export interface MasteryNextStep {
+  action: MasteryNextStepAction
+  module_id?: string | null
+  module_title?: string | null
+  knowledge_point_id?: string | null
+  knowledge_point_title?: string | null
+  reason: string
+  prompt?: string | null
+}
+
+export interface MasteryDocumentDetail extends MasteryDocumentSummary {
+  modules: MasteryModule[]
+  next_step: MasteryNextStep
+  build_warnings: string[]
+}
+
+export interface MasteryStudyResponse {
+  knowledge_point: MasteryKnowledgePoint
+  study_prompt: string
+  next_step: MasteryNextStep
+}
+
+export interface MasteryQuizResponse {
+  knowledge_point_id: string
+  question: string
+  expected_points: string[]
+  next_step: MasteryNextStep
+}
+
+export interface MasteryGradeResponse {
+  passed: boolean
+  score: number
+  feedback: string
+  retry_question?: string | null
+  next_step: MasteryNextStep
+  document: MasteryDocumentDetail
+}
+
+export interface MasteryAssessResponse {
+  passed: boolean
+  next_step: MasteryNextStep
+  document: MasteryDocumentDetail
 }
 
 // ============================================================
