@@ -4,6 +4,7 @@ import types
 import unittest
 
 import pytest
+from fastapi.testclient import TestClient
 from starlette.datastructures import UploadFile
 
 if "pydantic_settings" not in sys.modules:
@@ -35,6 +36,8 @@ if "pydantic_settings" not in sys.modules:
 from src.api.documents import upload_document, validate_mastery_upload_file
 from src.core.exceptions import ConflictError
 from src.core.exceptions import ValidationError
+from src.main import create_app
+from src.mastery.models import KnowledgePoint, KnowledgeType, LearningModule, LearningProgress
 from src.schemas.documents import UploadResult
 
 
@@ -179,3 +182,96 @@ class UploadDocumentRegistrationTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(mastery.calls, [])
+
+
+class FakeMasteryService:
+    def __init__(self):
+        kp = KnowledgePoint(
+            id="doc-1_m0_kp0",
+            name="变量",
+            type=KnowledgeType.CONCEPT,
+            module_id="doc-1_m0",
+            description="变量",
+        )
+        module = LearningModule(id="doc-1_m0", name="基础", order=0, knowledge_points=[kp])
+        self.progress = LearningProgress(
+            doc_id="doc-1",
+            title="文档",
+            build_status="ready",
+            rag_status="processed",
+            modules=[module],
+        )
+
+    def list_documents(self):
+        return [
+            {
+                "doc_id": "doc-1",
+                "title": "文档",
+                "source_file": "source.md",
+                "rag_status": "processed",
+                "build_status": "ready",
+            }
+        ]
+
+    def get_document(self, doc_id):
+        if doc_id == "missing":
+            return None
+        return self.progress
+
+    def get_document_payload(self, doc_id):
+        return {
+            "doc_id": doc_id,
+            "title": "文档",
+            "rag_status": "processed",
+            "build_status": "ready",
+            "map": {
+                "counts": {"total": 1, "mastered": 0, "learning": 0, "new": 1},
+                "modules": [],
+            },
+            "next": {"action": "probe"},
+        }
+
+    def assess(self, doc_id, kp_id, *, passed, feedback=""):
+        return {
+            "passed": passed,
+            "next": {"action": "complete"},
+            "map": {"counts": {"total": 1, "mastered": 1, "learning": 0, "new": 0}},
+        }
+
+
+def test_mastery_documents_route_lists_documents():
+    app = create_app()
+    app.state.mastery_service = FakeMasteryService()
+    client = TestClient(app)
+    response = client.get("/mastery/documents")
+    assert response.status_code == 200
+    assert response.json()["documents"][0]["doc_id"] == "doc-1"
+
+
+def test_mastery_document_detail_route_returns_payload():
+    app = create_app()
+    app.state.mastery_service = FakeMasteryService()
+    client = TestClient(app)
+    response = client.get("/mastery/documents/doc-1")
+    assert response.status_code == 200
+    assert response.json()["next"]["action"] == "probe"
+
+
+def test_mastery_document_detail_route_404_for_missing_doc():
+    app = create_app()
+    app.state.mastery_service = FakeMasteryService()
+    client = TestClient(app)
+    response = client.get("/mastery/documents/missing")
+    assert response.status_code == 404
+
+
+def test_mastery_assess_route_accepts_knowledge_point_id_in_body():
+    app = create_app()
+    app.state.mastery_service = FakeMasteryService()
+    client = TestClient(app)
+    response = client.post(
+        "/mastery/documents/doc-1/assess",
+        json={"knowledge_point_id": "doc-1_m0_kp0", "passed": True, "feedback": "ok"},
+    )
+    assert response.status_code == 200
+    assert response.json()["passed"] is True

@@ -33,3 +33,16 @@ if "pydantic_settings" not in sys.modules:
     pydantic_settings.BaseSettings = BaseSettings
     pydantic_settings.SettingsConfigDict = SettingsConfigDict
     sys.modules["pydantic_settings"] = pydantic_settings
+
+if "openai" not in sys.modules:
+    openai = types.ModuleType("openai")
+
+    class AsyncOpenAI:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def close(self):
+            return None
+
+    openai.AsyncOpenAI = AsyncOpenAI
+    sys.modules["openai"] = openai

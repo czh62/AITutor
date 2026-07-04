@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from .api.documents import router as documents_router
 from .api.graph import router as graph_router
 from .api.health import router as health_router
+from .api.mastery import router as mastery_router
 from .api.query import router as query_router
 from .api.quiz import router as quiz_router
 from .core.config import get_settings
@@ -24,6 +25,7 @@ from .db.session import init_db, reset_database
 from .services import (
     create_lightrag_client,
     create_llm_client,
+    create_mastery_service,
     create_memory_manager,
     create_quiz_service,
     create_search_client,
@@ -68,6 +70,11 @@ async def lifespan(app: FastAPI):
     app.state.quiz_service = quiz_service
     logger.info("quiz service created")
 
+    # 创建 Mastery Path 服务，存到 app.state
+    mastery_service = create_mastery_service(llm_client, lightrag_client)
+    app.state.mastery_service = mastery_service
+    logger.info("mastery service created")
+
     logger.info("application startup complete")
     yield
 
@@ -107,6 +114,7 @@ def create_app() -> FastAPI:
     app.include_router(graph_router)
     app.include_router(query_router)
     app.include_router(quiz_router)
+    app.include_router(mastery_router)
 
     return app
 
