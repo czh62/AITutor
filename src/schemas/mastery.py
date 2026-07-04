@@ -48,6 +48,22 @@ class StudyResponse(BaseModel):
     dependencies: list[str] = []
 
 
+class StartPointResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    doc_id: str
+    knowledge_point_id: str
+    prompt: str
+    document: dict[str, Any]
+
+
+class SelfAssessRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    passed: bool
+    note: str = ""
+
+
 class QuizRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

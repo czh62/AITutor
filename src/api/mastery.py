@@ -15,6 +15,8 @@ from ..schemas.mastery import (
     MasteryDocumentListResponse,
     QuizRequest,
     QuizResponse,
+    SelfAssessRequest,
+    StartPointResponse,
     StudyResponse,
 )
 
@@ -70,6 +72,47 @@ async def study_knowledge_point(
 ):
     _require_progress(service, doc_id)
     return service.study_knowledge_point(doc_id, kp_id)
+
+
+@router.post("/documents/{doc_id}/points/{kp_id}/start", response_model=StartPointResponse)
+async def start_point_learning(
+    doc_id: str,
+    kp_id: str,
+    service: MasteryService = Depends(get_mastery_service),
+):
+    _require_progress(service, doc_id)
+    return service.start_point_learning(doc_id, kp_id)
+
+
+@router.post("/documents/{doc_id}/points/{kp_id}/self-assess", response_model=MasteryDocumentDetailResponse)
+async def self_assess_point(
+    doc_id: str,
+    kp_id: str,
+    request: SelfAssessRequest,
+    service: MasteryService = Depends(get_mastery_service),
+):
+    _require_progress(service, doc_id)
+    return service.self_assess_point(doc_id, kp_id, passed=request.passed, note=request.note)
+
+
+@router.post("/documents/{doc_id}/points/{kp_id}/quiz-started", response_model=MasteryDocumentDetailResponse)
+async def quiz_started_for_point(
+    doc_id: str,
+    kp_id: str,
+    service: MasteryService = Depends(get_mastery_service),
+):
+    _require_progress(service, doc_id)
+    return service.record_quiz_started(doc_id, kp_id)
+
+
+@router.post("/documents/{doc_id}/points/{kp_id}/review-later", response_model=MasteryDocumentDetailResponse)
+async def review_later_for_point(
+    doc_id: str,
+    kp_id: str,
+    service: MasteryService = Depends(get_mastery_service),
+):
+    _require_progress(service, doc_id)
+    return service.schedule_review_later(doc_id, kp_id)
 
 
 @router.post("/documents/{doc_id}/quiz/{kp_id}", response_model=QuizResponse)

@@ -52,8 +52,13 @@ def display_mastery(progress: LearningProgress, kp: KnowledgePoint) -> float:
 def objective_status(progress: LearningProgress, kp: KnowledgePoint) -> str:
     if is_mastered(progress, kp):
         return "mastered"
-    seen = any(attempt.knowledge_point_id == kp.id for attempt in progress.quiz_attempts) or (
-        kp.id in progress.qualitative_mastery
+    seen = (
+        any(attempt.knowledge_point_id == kp.id for attempt in progress.quiz_attempts)
+        or kp.id in progress.qualitative_mastery
+        or kp.id in progress.started_points
+        or kp.id in progress.quiz_started_points
+        or kp.id in progress.review_later_points
+        or progress.mastery_levels.get(kp.id, 0.0) > 0
     )
     return "learning" if seen else "new"
 

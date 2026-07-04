@@ -267,3 +267,82 @@ def test_source_resolution_checks_lightrag_parsed_inputs(tmp_path, monkeypatch):
     )
 
     assert service._resolve_source_file("lesson.txt").resolve() == parsed.resolve()
+
+
+def make_learning_progress_for_actions() -> LearningProgress:
+    kp_dependency = KnowledgePoint(
+        id="doc-1_m0_kp0",
+        name="向量检索",
+        type=KnowledgeType.MEMORY,
+        module_id="doc-1_m0",
+        description="用向量相似度找相关内容。",
+    )
+    kp_target = KnowledgePoint(
+        id="doc-1_m0_kp1",
+        name="检索增强生成",
+        type=KnowledgeType.CONCEPT,
+        module_id="doc-1_m0",
+        description="结合检索和生成回答问题。",
+        dependencies=[kp_dependency.id],
+    )
+    module = LearningModule(
+        id="doc-1_m0",
+        name="RAG 基础",
+        order=0,
+        knowledge_points=[kp_dependency, kp_target],
+    )
+    return LearningProgress(
+        doc_id="doc-1",
+        title="RAG 文档",
+        source_file="rag.md",
+        rag_status="processed",
+        build_status="ready",
+        modules=[module],
+    )
+
+
+def test_start_point_learning_returns_guided_agentloop_prompt(tmp_path):
+    store = MasteryStore(root=tmp_path)
+    store.save_progress(make_learning_progress_for_actions())
+    service = MasteryService(
+        llm=FakeLLM("{}"),
+        lightrag=FakeLightRAG({"documents": []}),
+        store=store,
+        builder=FakeBuilder(),
+    )
+
+    result = service.start_point_learning("doc-1", "doc-1_m0_kp1")
+
+    assert result["doc_id"] == "doc-1"
+    assert result["knowledge_point_id"] == "doc-1_m0_kp1"
+    assert "请作为 AI Tutor" in result["prompt"]
+    assert "RAG 文档" in result["prompt"]
+    assert "RAG 基础" in result["prompt"]
+    assert "检索增强生成" in result["prompt"]
+    assert "结合检索和生成回答问题" in result["prompt"]
+    assert "向量检索" in result["prompt"]
+    progress = store.load_progress("doc-1")
+    assert progress is not None
+    assert progress.active_knowledge_point_id == "doc-1_m0_kp1"
+    assert progress.mastery_levels["doc-1_m0_kp1"] == 0.1
+    assert progress.qualitative_mastery.get("doc-1_m0_kp1") is None
+
+
+def test_point_actions_update_progress_without_agentloop_grading(tmp_path):
+    store = MasteryStore(root=tmp_path)
+    store.save_progress(make_learning_progress_for_actions())
+    service = MasteryService(
+        llm=FakeLLM("{}"),
+        lightrag=FakeLightRAG({"documents": []}),
+        store=store,
+        builder=FakeBuilder(),
+    )
+
+    quiz_result = service.record_quiz_started("doc-1", "doc-1_m0_kp1")
+    assert quiz_result["map"]["counts"]["learning"] == 1
+
+    review_result = service.schedule_review_later("doc-1", "doc-1_m0_kp1")
+    assert review_result["map"]["due_reviews"] >= 0
+
+    assessed = service.self_assess_point("doc-1", "doc-1_m0_kp1", passed=True, note="能讲清楚")
+    assert assessed["map"]["counts"]["mastered"] == 1

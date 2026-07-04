@@ -244,6 +244,23 @@ class FakeMasteryService:
     async def build_document(self, doc_id):
         return self.progress
 
+    def start_point_learning(self, doc_id, kp_id):
+        return {
+            "doc_id": doc_id,
+            "knowledge_point_id": kp_id,
+            "prompt": "请作为 AI Tutor 带我学习。",
+            "document": self.get_document_payload(doc_id),
+        }
+
+    def self_assess_point(self, doc_id, kp_id, *, passed, note=""):
+        return self.get_document_payload(doc_id)
+
+    def record_quiz_started(self, doc_id, kp_id):
+        return self.get_document_payload(doc_id)
+
+    def schedule_review_later(self, doc_id, kp_id):
+        return self.get_document_payload(doc_id)
+
 
 def test_mastery_documents_route_lists_documents():
     app = create_app()
@@ -281,3 +298,26 @@ def test_mastery_assess_route_accepts_knowledge_point_id_in_body():
     )
     assert response.status_code == 200
     assert response.json()["passed"] is True
+
+
+def test_start_point_learning_route_returns_prompt():
+    app = create_app()
+    app.state.mastery_service = FakeMasteryService()
+    client = TestClient(app)
+    response = client.post("/mastery/documents/doc-1/points/doc-1_m0_kp0/start")
+    assert response.status_code == 200
+    assert response.json()["knowledge_point_id"] == "doc-1_m0_kp0"
+    assert "AI Tutor" in response.json()["prompt"]
+
+
+def test_point_action_routes_return_detail_payload():
+    app = create_app()
+    app.state.mastery_service = FakeMasteryService()
+    client = TestClient(app)
+    assert client.post("/mastery/documents/doc-1/points/doc-1_m0_kp0/quiz-started").status_code == 200
+    assert client.post("/mastery/documents/doc-1/points/doc-1_m0_kp0/review-later").status_code == 200
+    response = client.post(
+        "/mastery/documents/doc-1/points/doc-1_m0_kp0/self-assess",
+        json={"passed": True, "note": "理解了"},
+    )
+    assert response.status_code == 200

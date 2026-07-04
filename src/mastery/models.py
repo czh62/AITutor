@@ -134,6 +134,10 @@ class LearningProgress(BaseModel):
     review_queue: list[ReviewTask] = Field(default_factory=list)
     pending_question: PendingQuestion | None = None
     feynman_explanations: dict[str, str] = Field(default_factory=dict)
+    active_knowledge_point_id: str = ""
+    started_points: dict[str, float] = Field(default_factory=dict)
+    quiz_started_points: dict[str, float] = Field(default_factory=dict)
+    review_later_points: dict[str, float] = Field(default_factory=dict)
     version: int = 0
     created_at: float = Field(default_factory=time.time)
     updated_at: float = Field(default_factory=time.time)

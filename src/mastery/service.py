@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+import time
 import uuid
 
 from ..core.config import get_settings
 from .builder import MasteryBuilder
 from .extractors import extract_document_text
 from .grading import classify_error, grade_answer
-from .models import KnowledgeType, LearningProgress, PendingQuestion, QuizAttempt
+from .models import KnowledgePoint, KnowledgeType, LearningProgress, PendingQuestion, QuizAttempt
 from .policy import compute_mastery, find_knowledge_point, is_mastered, map_summary, next_objective
 from .scheduler import SpacedRepetitionScheduler
 from .storage import BuildJob, MasteryStore
@@ -137,6 +138,67 @@ class MasteryService:
             "next": next_objective(progress).to_dict(),
         }
 
+    def start_point_learning(self, doc_id: str, kp_id: str) -> dict[str, Any]:
+        progress = self._require_progress(doc_id)
+        kp, _, module_name = find_knowledge_point(progress, kp_id)
+        if kp is None:
+            from ..core.exceptions import NotFoundError
+
+            raise NotFoundError("Knowledge point not found")
+        dependency_titles = self._dependency_titles(progress, kp.dependencies)
+        prompt = self._build_guided_learning_prompt(progress, module_name, kp, dependency_titles)
+        progress.active_knowledge_point_id = kp.id
+        progress.started_points[kp.id] = time.time()
+        progress.mastery_levels[kp.id] = max(progress.mastery_levels.get(kp.id, 0.0), 0.1)
+        self._store.save_progress(progress)
+        return {
+            "doc_id": doc_id,
+            "knowledge_point_id": kp.id,
+            "prompt": prompt,
+            "document": self.get_document_payload(doc_id),
+        }
+
+    def self_assess_point(self, doc_id: str, kp_id: str, *, passed: bool, note: str = "") -> dict[str, Any]:
+        progress = self._require_progress(doc_id)
+        kp, _, _ = find_knowledge_point(progress, kp_id)
+        if kp is None:
+            from ..core.exceptions import NotFoundError
+
+            raise NotFoundError("Knowledge point not found")
+        progress.active_knowledge_point_id = kp.id
+        progress.qualitative_mastery[kp.id] = bool(passed)
+        progress.mastery_levels[kp.id] = 1.0 if passed else max(progress.mastery_levels.get(kp.id, 0.0), 0.4)
+        if note:
+            progress.feynman_explanations[kp.id] = note
+        self._store.save_progress(progress)
+        return self.get_document_payload(doc_id)
+
+    def record_quiz_started(self, doc_id: str, kp_id: str) -> dict[str, Any]:
+        progress = self._require_progress(doc_id)
+        kp, _, _ = find_knowledge_point(progress, kp_id)
+        if kp is None:
+            from ..core.exceptions import NotFoundError
+
+            raise NotFoundError("Knowledge point not found")
+        progress.active_knowledge_point_id = kp.id
+        progress.quiz_started_points[kp.id] = time.time()
+        progress.mastery_levels[kp.id] = max(progress.mastery_levels.get(kp.id, 0.0), 0.2)
+        self._store.save_progress(progress)
+        return self.get_document_payload(doc_id)
+
+    def schedule_review_later(self, doc_id: str, kp_id: str) -> dict[str, Any]:
+        progress = self._require_progress(doc_id)
+        kp, _, _ = find_knowledge_point(progress, kp_id)
+        if kp is None:
+            from ..core.exceptions import NotFoundError
+
+            raise NotFoundError("Knowledge point not found")
+        progress.active_knowledge_point_id = kp.id
+        progress.review_later_points[kp.id] = time.time()
+        progress.mastery_levels[kp.id] = max(progress.mastery_levels.get(kp.id, 0.0), 0.2)
+        self._store.save_progress(progress)
+        return self.get_document_payload(doc_id)
+
     async def build_document(self, doc_id: str) -> LearningProgress:
         progress = self._require_progress(doc_id)
         if progress.rag_status != "processed":
@@ -264,6 +326,10 @@ class MasteryService:
         progress.review_queue = []
         progress.pending_question = None
         progress.feynman_explanations = {}
+        progress.active_knowledge_point_id = ""
+        progress.started_points = {}
+        progress.quiz_started_points = {}
+        progress.review_later_points = {}
         self._store.save_progress(progress)
         return progress
 
@@ -330,6 +396,37 @@ class MasteryService:
             if candidate.exists() and candidate.is_file():
                 return candidate
         return None
+
+    def _dependency_titles(self, progress: LearningProgress, dependency_ids: list[str]) -> list[str]:
+        titles: list[str] = []
+        for dependency_id in dependency_ids:
+            dependency, _, _ = find_knowledge_point(progress, dependency_id)
+            if dependency is not None:
+                titles.append(dependency.name)
+        return titles
+
+    def _build_guided_learning_prompt(
+        self,
+        progress: LearningProgress,
+        module_name: str,
+        kp: KnowledgePoint,
+        dependency_titles: list[str],
+    ) -> str:
+        dependencies = "、".join(dependency_titles) if dependency_titles else "无明确前置依赖"
+        return (
+            f"请作为 AI Tutor，围绕当前文档中的知识点「{kp.name}」带我学习。\n\n"
+            "上下文：\n"
+            f"- 文档：{progress.title or progress.source_file or progress.doc_id}\n"
+            f"- 模块：{module_name or kp.module_id}\n"
+            f"- 知识点描述：{kp.description or '暂无描述'}\n"
+            f"- 前置依赖：{dependencies}\n\n"
+            "要求：\n"
+            "1. 先用直观语言解释它是什么；\n"
+            "2. 说明它依赖哪些前置知识；\n"
+            "3. 结合文档内容给一个例子；\n"
+            "4. 最后问我一个理解检查问题；\n"
+            "5. 如果我的背景或目标不清楚，使用 ask_user 追问后再继续。"
+        )
 
     def _require_progress(self, doc_id: str) -> LearningProgress:
         progress = self._store.load_progress(doc_id)
