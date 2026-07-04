@@ -1,11 +1,6 @@
 services:
   lightrag:
     image: ghcr.io/hkuds/lightrag:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
-      tags:
-        - ghcr.io/hkuds/lightrag:latest
     ports:
       - "${HOST:-0.0.0.0}:${PORT:-9621}:9621"
     volumes:
@@ -23,8 +18,33 @@ services:
       WORKING_DIR: "/app/data/rag_storage"
       INPUT_DIR: "/app/data/inputs"
       PROMPT_DIR: "/app/data/prompts"
-      # The container must listen on 0.0.0.0 to be reachable via the published port.
-      # SECURITY: set LIGHTRAG_API_KEY (or AUTH_ACCOUNTS with TOKEN_SECRET) in .env
-      # so the exposed server is authenticated — without it every endpoint is public.
       HOST: "0.0.0.0"
       PORT: "9621"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+    environment:
+      LIGHTRAG_BASE_URL: "http://lightrag:9621"
+    depends_on:
+      - lightrag
+
+  ui:
+    container_name: aitutory-ui
+    build:
+      context: ./ui
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5174:5174"
+    command: npm run dev -- --host 0.0.0.0 --port 5174
+    environment:
+      VITE_BACKEND_PROXY_TARGET: "http://backend:8000"
+    depends_on:
+      - backend
