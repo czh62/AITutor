@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     # 记忆系统（L1 追踪 + L2 摘要，SQLite 存储，随重启清空）
     memory_consolidation_enabled: bool = True
 
+    # Mastery Path
+    mastery_storage_dir: str = "./data/mastery_paths"
+    mastery_max_source_chars: int = 120000
+    mastery_build_poll_interval_seconds: float = 3.0
+
 
 @lru_cache
 def get_settings() -> Settings:

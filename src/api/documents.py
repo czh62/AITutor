@@ -6,8 +6,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 from fastapi import APIRouter, Depends, File, Request, UploadFile
 
+from ..core.exceptions import ValidationError
 from ..schemas.documents import (
     CancelPipelineResult,
     ClearCacheResult,
@@ -24,10 +28,34 @@ from ..services.lightrag_client import LightRAGClient
 
 router = APIRouter(tags=["documents"])
 
+SUPPORTED_MASTERY_EXTENSIONS = frozenset({".txt", ".md", ".pdf", ".docx"})
+SUPPORTED_MASTERY_CONTENT_TYPES = {
+    ".txt": {"text/plain", "application/octet-stream"},
+    ".md": {"text/markdown", "text/plain", "application/octet-stream"},
+    ".pdf": {"application/pdf", "application/octet-stream"},
+    ".docx": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/octet-stream",
+    },
+}
+
 
 def get_lightrag_client(request: Request) -> LightRAGClient:
     """从 app.state 获取 LightRAGClient（lifespan 中创建并存储）。"""
     return request.app.state.lightrag_client
+
+
+def get_mastery_service(request: Request) -> Any:
+    return getattr(request.app.state, "mastery_service", None)
+
+
+def validate_mastery_upload_file(filename: str, content_type: str | None) -> None:
+    suffix = Path(filename or "").suffix.lower()
+    if suffix not in SUPPORTED_MASTERY_EXTENSIONS:
+        raise ValidationError("仅支持上传 TXT、MD、PDF、DOCX 文件")
+    allowed = SUPPORTED_MASTERY_CONTENT_TYPES[suffix]
+    if content_type and content_type not in allowed:
+        raise ValidationError("文件类型与扩展名不匹配")
 
 
 # ------------------------------------------------------------------
@@ -68,13 +96,18 @@ async def scan_documents(client: LightRAGClient = Depends(get_lightrag_client)):
 async def upload_document(
     file: UploadFile = File(...),
     client: LightRAGClient = Depends(get_lightrag_client),
+    mastery: Any = Depends(get_mastery_service),
 ):
+    validate_mastery_upload_file(file.filename or "", file.content_type)
     content = await file.read()
     raw = await client.upload_document(
         file_name=file.filename or "unknown",
         file_content=content,
         content_type=file.content_type,
     )
+    track_id = raw.get("track_id")
+    if mastery is not None and raw.get("status") == "success" and track_id:
+        mastery.register_upload(track_id=track_id, file_name=file.filename or "unknown")
     return UploadResult(**raw)
 
 

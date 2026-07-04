@@ -83,6 +83,18 @@ class UploadResult(BaseModel):
 
     status: str  # "success" | "partial_success" | "failure"
     message: str
+    track_id: Optional[str] = None
+
+
+class TrackStatusResponse(BaseModel):
+    """上传轨道状态（Mastery Path 使用）。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    track_id: str
+    documents: List[DocStatusResponse]
+    total_count: int
+    status_summary: Dict[str, int]
 
 
 class ScanResult(BaseModel):

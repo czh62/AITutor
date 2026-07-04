@@ -207,6 +207,14 @@ class LightRAGClient:
         except httpx.HTTPError as exc:
             self._handle_error(exc)
 
+    async def get_track_status(self, track_id: str) -> dict:
+        try:
+            resp = await self._get_client().get(f"/documents/track_status/{track_id}")
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as exc:
+            self._handle_error(exc)
+
     # ------------------------------------------------------------------
     #  8. 取消流水线
     # ------------------------------------------------------------------
