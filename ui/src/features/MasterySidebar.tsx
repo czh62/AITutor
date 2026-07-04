@@ -237,9 +237,13 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
     return () => clearInterval(timer)
   }, [loadDocuments, needsPolling])
 
+  const selectedDetailDocId = selectedDocument?.doc_id ?? ''
+  const selectedDetailRagStatus = selectedDocument?.rag_status ?? ''
+  const selectedDetailBuildStatus = selectedDocument ? getBuildStatus(selectedDocument) : ''
+
   useEffect(() => {
     loadDetail(selectedDocument)
-  }, [loadDetail, selectedDocument])
+  }, [loadDetail, selectedDetailBuildStatus, selectedDetailDocId, selectedDetailRagStatus])
 
   useEffect(() => {
     setSelectedPoint(null)

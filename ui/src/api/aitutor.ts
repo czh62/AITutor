@@ -686,13 +686,47 @@ function markMockKnowledgePoint(
   knowledgePointId: string,
   patch: Partial<MasteryKnowledgePoint>
 ): MasteryDocumentDetail {
+  for (const module of mockMasteryModules) {
+    module.knowledge_points = module.knowledge_points.map((point) => {
+      if (point.id !== knowledgePointId) return point
+      const nextMasteryLevel =
+        patch.mastery_level === undefined
+          ? point.mastery_level
+          : Math.max(point.mastery_level, patch.mastery_level)
+      const nextMastery =
+        patch.mastery === undefined
+          ? point.mastery
+          : Math.max(point.mastery ?? point.mastery_level / 100, patch.mastery)
+      return {
+        ...point,
+        ...patch,
+        status: point.status === 'mastered' && patch.status === 'learning'
+          ? 'mastered'
+          : patch.status ?? point.status,
+        mastery_level: nextMasteryLevel,
+        mastery: nextMastery
+      }
+    })
+  }
+
+  const points = mockMasteryModules.flatMap((module) => module.knowledge_points)
+  const mastered = points.filter((point) => point.status === 'mastered').length
+  const learning = points.filter((point) => point.status === 'learning').length
+  const progress = normalizeProgress(
+    {
+      mastered,
+      learning,
+      new: Math.max(points.length - mastered - learning, 0),
+      total: points.length
+    },
+    points.filter((point) => point.review_due && new Date(point.review_due).getTime() <= Date.now()).length
+  )
+  mockMasteryDocuments = mockMasteryDocuments.map((doc) =>
+    doc.doc_id === docId ? { ...doc, progress, updated_at: new Date().toISOString() } : doc
+  )
+
   const detail = getMockMasteryDetail(docId)
-  detail.modules = detail.modules.map((module) => ({
-    ...module,
-    knowledge_points: module.knowledge_points.map((point) =>
-      point.id === knowledgePointId ? { ...point, ...patch } : point
-    )
-  }))
+  detail.progress = progress
   return detail
 }
 
@@ -1387,6 +1421,9 @@ export async function quizGenerateStream(
   }
 ): Promise<void> {
   const { onProgress, onQuestion, onResult, onError, onLoopEvent, signal } = callbacks
+  if (USE_MOCK) {
+    return quizGenerateStreamMock(request, { onProgress, onQuestion, onResult, onLoopEvent, signal })
+  }
   try {
     const resp = await fetch(`${backendBaseUrl}/quiz/generate/stream`, {
       method: 'POST',
@@ -1466,6 +1503,86 @@ export async function quizGenerateStream(
     if ((err as Error).name === 'AbortError') return
     onError?.(err instanceof Error ? err.message : String(err))
   }
+}
+
+async function quizGenerateStreamMock(
+  request: QuizGenerateRequest,
+  callbacks: {
+    onProgress: (msg: string) => void
+    onQuestion: (question: QuizQuestion) => void
+    onResult: (questions: QuizQuestion[]) => void
+    onLoopEvent?: (event: LoopEvent) => void
+    signal?: AbortSignal
+  }
+): Promise<void> {
+  const { onProgress, onQuestion, onResult, onLoopEvent, signal } = callbacks
+  const preferredTypes = request.question_types.length > 0
+    ? request.question_types
+    : (['choice', 'short_answer', 'concept'] as const)
+  const questions: QuizQuestion[] = []
+
+  const emitProgress = async (content: string, round: number) => {
+    if (signal?.aborted) return
+    onProgress(content)
+    onLoopEvent?.({
+      type: 'progress',
+      round,
+      content,
+      metadata: { call_id: `mock_quiz_progress_${round}`, call_kind: 'quiz_generation' }
+    })
+    await delay(300)
+  }
+
+  await emitProgress(`正在分析「${request.topic}」的考点`, 0)
+  await emitProgress('正在生成题目与参考答案', 1)
+
+  for (let index = 0; index < request.num_questions; index += 1) {
+    if (signal?.aborted) return
+    const questionType = preferredTypes[index % preferredTypes.length]
+    const question: QuizQuestion = {
+      question_id: `mock-quiz-${Date.now()}-${index + 1}`,
+      question_type: questionType,
+      question: questionType === 'choice'
+        ? `关于「${request.topic}」，下列哪一项最能体现核心概念？`
+        : `请结合文档语境说明「${request.topic}」的第 ${index + 1} 个关键点。`,
+      correct_answer: questionType === 'choice' ? 'A' : '应覆盖定义、依赖关系和一个文档中的应用场景。',
+      explanation: '这是 mock 题目；真实环境会由后端 AgentLoop 根据文档上下文生成。',
+      options: questionType === 'choice'
+        ? {
+            A: '先明确概念，再说明依赖与应用',
+            B: '只记住章节标题',
+            C: '跳过前置知识直接做题',
+            D: '只关注术语翻译'
+          }
+        : null,
+      topic: request.topic,
+      difficulty: request.difficulty
+    }
+    questions.push(question)
+    onQuestion(question)
+    onLoopEvent?.({
+      type: 'content',
+      round: index,
+      content: question.question,
+      metadata: {
+        call_id: `mock_quiz_question_${index + 1}`,
+        call_kind: 'quiz_question',
+        question
+      }
+    })
+    // eslint-disable-next-line no-await-in-loop
+    await delay(240)
+  }
+
+  if (signal?.aborted) return
+  onProgress('出题完成')
+  onLoopEvent?.({
+    type: 'result',
+    round: 0,
+    content: '出题完成',
+    metadata: { questions, call_id: 'mock_quiz_result', call_kind: 'quiz_result' }
+  })
+  onResult(questions)
 }
 
 // ============================================================
