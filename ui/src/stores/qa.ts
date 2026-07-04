@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import type { ChatMessage, QueryMode } from '@/api/types'
+import type { ChatMessage, QACommand, QueryMode } from '@/api/types'
 
 /**
  * 重新水合时清理残留的 isStreaming 标记。
@@ -33,10 +33,13 @@ interface QAState {
   messages: ChatMessage[]
   queryMode: QueryMode
   sessionId: string | null
+  pendingCommands: QACommand[]
   setQueryMode: (mode: QueryMode) => void
   setSessionId: (id: string | null) => void
   addMessage: (message: ChatMessage) => void
   updateMessage: (id: string, patch: Partial<ChatMessage>) => void
+  enqueueCommand: (command: QACommand) => void
+  consumeCommand: (id: string) => void
   clearMessages: () => void
 }
 
@@ -46,6 +49,7 @@ export const useQAStore = create<QAState>()(
       messages: [],
       queryMode: 'mix',
       sessionId: null,
+      pendingCommands: [],
       setQueryMode: (queryMode) => set({ queryMode }),
       setSessionId: (sessionId) => set({ sessionId }),
       addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
@@ -54,6 +58,12 @@ export const useQAStore = create<QAState>()(
           messages: state.messages.map((message) =>
             message.id === id ? { ...message, ...patch } : message
           )
+        })),
+      enqueueCommand: (command) =>
+        set((state) => ({ pendingCommands: [...state.pendingCommands, command] })),
+      consumeCommand: (id) =>
+        set((state) => ({
+          pendingCommands: state.pendingCommands.filter((command) => command.id !== id)
         })),
       clearMessages: () => set({ messages: [], sessionId: null })
     }),

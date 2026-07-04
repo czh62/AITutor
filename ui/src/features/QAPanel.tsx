@@ -8,6 +8,7 @@ import {
 import type {
   AskUserPayload,
   ChatMessage as ChatMessageType,
+  QACommand,
   QueryMode,
   QuizDifficulty,
   QuizQuestion,
@@ -21,14 +22,18 @@ import QuizConfigDialog from '@/components/chat/QuizConfigDialog'
 import { isNarrationMarker } from '@/lib/streamEvents'
 import { useQAStore } from '@/stores/qa'
 
+type QuizRunConfig = Extract<QACommand, { kind: 'quiz' }>
+
 export default function QAPanel() {
   const messages = useQAStore((state) => state.messages)
   const queryMode = useQAStore((state) => state.queryMode)
   const sessionId = useQAStore((state) => state.sessionId)
+  const pendingCommands = useQAStore((state) => state.pendingCommands)
   const setQueryMode = useQAStore((state) => state.setQueryMode)
   const setSessionId = useQAStore((state) => state.setSessionId)
   const addMessage = useQAStore((state) => state.addMessage)
   const updateMessage = useQAStore((state) => state.updateMessage)
+  const consumeCommand = useQAStore((state) => state.consumeCommand)
   const clearMessages = useQAStore((state) => state.clearMessages)
 
   const [input, setInput] = useState('')
@@ -116,11 +121,10 @@ export default function QAPanel() {
     [setSessionId, updateMessage]
   )
 
-  const handleSend = useCallback(async () => {
-    const query = input.trim()
+  const runQuery = useCallback(async (rawQuery: string) => {
+    const query = rawQuery.trim()
     if (!query || isStreaming) return
 
-    setInput('')
     const userMsg: ChatMessageType = { id: genId(), role: 'user', content: query }
     const assistantId = genId()
     const assistantMsg: ChatMessageType = {
@@ -152,11 +156,18 @@ export default function QAPanel() {
     addMessage,
     buildStreamCallbacks,
     forceWebSearch,
-    input,
     isStreaming,
     queryMode,
     updateMessage
   ])
+
+  const handleSend = useCallback(async () => {
+    const query = input.trim()
+    if (!query || isStreaming) return
+
+    setInput('')
+    await runQuery(query)
+  }, [input, isStreaming, runQuery])
 
   const handleAskUserRespond = useCallback(
     async (assistantId: string, answers: Record<string, string>) => {
@@ -191,14 +202,10 @@ export default function QAPanel() {
     setIsStreaming(false)
   }, [])
 
-  const handleQuizConfirm = useCallback(
-    async (config: {
-      topic: string
-      num_questions: number
-      difficulty: QuizDifficulty
-      question_types: QuizQuestionType[]
-    }) => {
-      setShowQuizDialog(false)
+  const runQuiz = useCallback(
+    async (config: Pick<QuizRunConfig, 'topic' | 'num_questions' | 'difficulty' | 'question_types'>) => {
+      if (isStreaming) return
+
       const assistantId = genId()
       const questions: QuizQuestion[] = []
       const events: StreamEvent[] = []
@@ -261,8 +268,39 @@ export default function QAPanel() {
         abortRef.current = null
       }
     },
-    [addMessage, updateMessage]
+    [addMessage, isStreaming, updateMessage]
   )
+
+  const handleQuizConfirm = useCallback(
+    async (config: {
+      topic: string
+      num_questions: number
+      difficulty: QuizDifficulty
+      question_types: QuizQuestionType[]
+    }) => {
+      setShowQuizDialog(false)
+      await runQuiz(config)
+    },
+    [runQuiz]
+  )
+
+  useEffect(() => {
+    if (isStreaming || pendingCommands.length === 0) return
+
+    const command = pendingCommands[0]
+    consumeCommand(command.id)
+    if (command.kind === 'query') {
+      void runQuery(command.prompt)
+      return
+    }
+
+    void runQuiz({
+      topic: command.topic,
+      num_questions: command.num_questions,
+      difficulty: command.difficulty,
+      question_types: command.question_types
+    })
+  }, [consumeCommand, isStreaming, pendingCommands, runQuery, runQuiz])
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">

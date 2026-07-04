@@ -391,6 +391,23 @@ export interface ChatMessage {
   quizJudgments?: Record<number, QuizJudgmentState>
 }
 
+export type QACommand =
+  | {
+      id: string
+      kind: 'query'
+      prompt: string
+      metadata?: { source: 'mastery'; docId: string; knowledgePointId: string }
+    }
+  | {
+      id: string
+      kind: 'quiz'
+      topic: string
+      num_questions: number
+      difficulty: QuizDifficulty
+      question_types: QuizQuestionType[]
+      metadata?: { source: 'mastery'; docId: string; knowledgePointId: string }
+    }
+
 /** AgentLoop 思维链追踪 */
 export interface LoopTrace {
   rounds: number
