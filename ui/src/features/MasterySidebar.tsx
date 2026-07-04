@@ -4,12 +4,17 @@ import {
   BrainCircuitIcon,
   CheckCircle2Icon,
   ChevronLeftIcon,
-  CircleDotIcon,
   ClockIcon,
   Loader2Icon,
-  RefreshCwIcon
+  RefreshCwIcon,
+  RotateCcwIcon
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import BuildStatusDialog from '@/components/mastery/BuildStatusDialog'
+import KnowledgePointDialog from '@/components/mastery/KnowledgePointDialog'
+import MasteryTree from '@/components/mastery/MasteryTree'
+import ResetProgressDialog from '@/components/mastery/ResetProgressDialog'
+import ReviewDialog from '@/components/mastery/ReviewDialog'
 import { getMasteryDocument, getMasteryDocuments } from '@/api/aitutor'
 import type {
   MasteryBuildStatus,
@@ -26,6 +31,8 @@ interface MasterySidebarProps {
 }
 
 const BUILD_STATUS_LABELS: Record<MasteryBuildStatus, string> = {
+  not_started: '处理中',
+  queued: '处理中',
   waiting_rag: '处理中',
   building: '构建中',
   ready: '可学习',
@@ -33,21 +40,9 @@ const BUILD_STATUS_LABELS: Record<MasteryBuildStatus, string> = {
   rag_failed: 'RAG 失败'
 }
 
-const KNOWLEDGE_TYPE_LABELS: Record<MasteryKnowledgePoint['knowledge_type'], string> = {
-  memory: '记忆',
-  concept: '概念',
-  procedure: '程序',
-  design: '设计'
-}
-
-const STATUS_LABELS: Record<MasteryKnowledgePoint['status'], string> = {
-  new: '未学',
-  learning: '学习中',
-  mastered: '已掌握'
-}
-
 function getBuildStatus(doc: MasteryDocumentSummary): MasteryBuildStatus {
   if (doc.rag_status === 'failed') return 'rag_failed'
+  if (doc.rag_status !== 'processed') return 'waiting_rag'
   return doc.build_status
 }
 
@@ -61,12 +56,6 @@ function statusTone(status: MasteryBuildStatus): string {
   if (status === 'build_failed' || status === 'rag_failed') return 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300'
   if (status === 'building') return 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300'
   return 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-}
-
-function pointTone(point: MasteryKnowledgePoint): string {
-  if (point.status === 'mastered') return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-  if (point.status === 'learning') return 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300'
-  return 'border-border bg-background text-muted-foreground'
 }
 
 function StatusIcon({ status }: { status: MasteryBuildStatus }) {
@@ -140,57 +129,16 @@ function DocumentRow({
   )
 }
 
-function PointNode({ point }: { point: MasteryKnowledgePoint }) {
-  return (
-    <button
-      type="button"
-      className="group flex w-full items-start gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/70"
-      title={point.description}
-    >
-      <span className="mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border bg-background">
-        <CircleDotIcon className="h-2.5 w-2.5 text-muted-foreground group-hover:text-foreground" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium text-foreground">{point.title}</span>
-          <span className={cn('shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium', pointTone(point))}>
-            {STATUS_LABELS[point.status]}
-          </span>
-        </span>
-        <span className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-          {point.description}
-        </span>
-        <span className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span>{KNOWLEDGE_TYPE_LABELS[point.knowledge_type]}</span>
-          <span>{point.mastery_level}%</span>
-          {point.has_pending_question && <span className="text-amber-600 dark:text-amber-300">待作答</span>}
-          {point.dependencies.length > 0 && <span>{point.dependencies.length} 个依赖</span>}
-        </span>
-      </span>
-    </button>
-  )
-}
-
-function ModuleTree({ module }: { module: MasteryModule }) {
-  return (
-    <section className="border-b border-border/60 py-3 last:border-b-0">
-      <div className="px-2">
-        <p className="text-sm font-semibold text-foreground">{module.title}</p>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{module.summary}</p>
-      </div>
-      <div className="mt-2 space-y-1">
-        {module.knowledge_points.map((point) => (
-          <PointNode key={point.id} point={point} />
-        ))}
-      </div>
-    </section>
-  )
-}
-
 export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
   const [documents, setDocuments] = useState<MasteryDocumentSummary[]>([])
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MasteryDocumentDetail | null>(null)
+  const [selectedPoint, setSelectedPoint] = useState<MasteryKnowledgePoint | null>(null)
+  const [selectedModule, setSelectedModule] = useState<MasteryModule | null>(null)
+  const [pointDialogOpen, setPointDialogOpen] = useState(false)
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
+  const [buildStatusOpen, setBuildStatusOpen] = useState(false)
+  const [resetDialogOpen, setResetDialogOpen] = useState(false)
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const mountedRef = useRef(true)
@@ -227,7 +175,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
   }, [])
 
   const loadDetail = useCallback(async (doc: MasteryDocumentSummary | null) => {
-    if (!doc || getBuildStatus(doc) !== 'ready') {
+    if (!doc || doc.rag_status !== 'processed' || getBuildStatus(doc) !== 'ready') {
       setDetail(null)
       return
     }
@@ -241,6 +189,11 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
       if (mountedRef.current) setLoadingDetail(false)
     }
   }, [])
+
+  const refreshMastery = useCallback(async () => {
+    await loadDocuments()
+    await loadDetail(selectedDocument)
+  }, [loadDocuments, loadDetail, selectedDocument])
 
   useEffect(() => {
     loadDocuments()
@@ -257,6 +210,14 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
   }, [loadDetail, selectedDocument])
 
   const readyCount = documents.filter((doc) => getBuildStatus(doc) === 'ready').length
+  const canRenderTree = selectedDocument?.rag_status === 'processed' && getBuildStatus(selectedDocument) === 'ready'
+  const selectedPointId = selectedPoint?.id
+
+  const handleKnowledgePointClick = (point: MasteryKnowledgePoint, module: MasteryModule) => {
+    setSelectedPoint(point)
+    setSelectedModule(module)
+    setPointDialogOpen(true)
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -272,7 +233,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={loadDocuments}
+            onClick={refreshMastery}
             disabled={loadingDocs}
             tooltip="刷新知识点"
           >
@@ -307,7 +268,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
         <div className="min-h-0 flex-1 overflow-y-auto px-2">
           {!selectedDocument ? (
             <div className="py-8 text-center text-xs text-muted-foreground">暂无文档</div>
-          ) : getBuildStatus(selectedDocument) !== 'ready' ? (
+          ) : !canRenderTree ? (
             <div className="py-8 text-center">
               <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-md border bg-background">
                 <StatusIcon status={getBuildStatus(selectedDocument)} />
@@ -321,6 +282,14 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                   {selectedDocument.build_error}
                 </p>
               )}
+              <Button
+                className="mt-4"
+                variant="outline"
+                size="sm"
+                onClick={() => setBuildStatusOpen(true)}
+              >
+                查看状态
+              </Button>
             </div>
           ) : loadingDetail ? (
             <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
@@ -353,12 +322,42 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                     <p className="text-muted-foreground">复习</p>
                   </div>
                 </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReviewDialogOpen(true)}
+                    className="px-2 text-xs"
+                  >
+                    <ClockIcon className="h-3.5 w-3.5" />
+                    复习
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBuildStatusOpen(true)}
+                    className="px-2 text-xs"
+                  >
+                    状态
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setResetDialogOpen(true)}
+                    className="px-2 text-xs"
+                  >
+                    <RotateCcwIcon className="h-3.5 w-3.5" />
+                    重置
+                  </Button>
+                </div>
               </div>
 
-              <div className="mt-2">
-                {detail.modules.map((module) => (
-                  <ModuleTree key={module.id} module={module} />
-                ))}
+              <div className="mt-3">
+                <MasteryTree
+                  modules={detail.modules}
+                  selectedKnowledgePointId={selectedPointId}
+                  onKnowledgePointClick={handleKnowledgePointClick}
+                />
               </div>
             </div>
           ) : (
@@ -366,6 +365,33 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
           )}
         </div>
       </div>
+      <KnowledgePointDialog
+        open={pointDialogOpen}
+        onOpenChange={setPointDialogOpen}
+        docId={selectedDocument?.doc_id ?? ''}
+        module={selectedModule}
+        knowledgePoint={selectedPoint}
+        onChanged={refreshMastery}
+      />
+      <ReviewDialog
+        open={reviewDialogOpen}
+        onOpenChange={setReviewDialogOpen}
+        docId={selectedDocument?.doc_id ?? ''}
+        detail={detail}
+        onChanged={refreshMastery}
+      />
+      <BuildStatusDialog
+        open={buildStatusOpen}
+        onOpenChange={setBuildStatusOpen}
+        document={selectedDocument}
+        onChanged={refreshMastery}
+      />
+      <ResetProgressDialog
+        open={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
+        document={selectedDocument}
+        onChanged={refreshMastery}
+      />
     </div>
   )
 }

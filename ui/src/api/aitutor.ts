@@ -73,6 +73,146 @@ const api = axios.create({
 // ---- Mock 辅助 ----
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
+type RawMasterySummary = {
+  doc_id: string
+  title?: string
+  source_file?: string
+  rag_status?: string
+  build_status?: MasteryDocumentSummary['build_status']
+  build_error?: string | null
+  counts?: Partial<MasteryDocumentSummary['progress']['counts']>
+  due_reviews?: number
+  progress?: MasteryDocumentSummary['progress']
+  updated_at?: string
+}
+
+type RawMasteryDetail = RawMasterySummary & {
+  map?: {
+    counts?: Partial<MasteryDocumentSummary['progress']['counts']>
+    due_reviews?: number
+    complete?: boolean
+    modules?: Array<{
+      id: string
+      name?: string
+      title?: string
+      description?: string
+      summary?: string
+      mastered?: number
+      total?: number
+      knowledge_points?: Array<{
+        id: string
+        name?: string
+        title?: string
+        type?: MasteryKnowledgePoint['knowledge_type']
+        knowledge_type?: MasteryKnowledgePoint['knowledge_type']
+        status?: MasteryKnowledgePoint['status']
+        mastery?: number
+        mastery_level?: number
+        description?: string
+        dependencies?: string[]
+        review_due?: string | null
+        has_pending_question?: boolean
+      }>
+    }>
+  }
+  modules?: MasteryModule[]
+  next?: Partial<MasteryNextStep>
+  next_step?: MasteryNextStep
+  build_warnings?: string[]
+}
+
+function normalizeProgress(
+  counts?: Partial<MasteryDocumentSummary['progress']['counts']>,
+  dueReviews?: number,
+  complete?: boolean
+): MasteryDocumentSummary['progress'] {
+  const safeCounts = {
+    mastered: counts?.mastered ?? 0,
+    learning: counts?.learning ?? 0,
+    new: counts?.new ?? 0,
+    total: counts?.total ?? 0
+  }
+  return {
+    counts: safeCounts,
+    due_reviews: dueReviews ?? 0,
+    complete: complete ?? (safeCounts.total > 0 && safeCounts.mastered === safeCounts.total)
+  }
+}
+
+function normalizeMasterySummary(raw: RawMasterySummary): MasteryDocumentSummary {
+  return {
+    doc_id: raw.doc_id,
+    title: raw.title || raw.source_file || raw.doc_id,
+    source_file: raw.source_file || raw.title || raw.doc_id,
+    rag_status: raw.rag_status || 'pending',
+    build_status: raw.build_status || 'not_started',
+    build_error: raw.build_error || null,
+    updated_at: raw.updated_at || new Date().toISOString(),
+    progress: raw.progress ?? normalizeProgress(raw.counts, raw.due_reviews)
+  }
+}
+
+function normalizeNextStep(raw?: Partial<MasteryNextStep>): MasteryNextStep {
+  return {
+    action: (raw?.action as MasteryNextStep['action']) || 'complete',
+    module_id: raw?.module_id || null,
+    module_title: raw?.module_title || raw?.module_name || null,
+    module_name: raw?.module_name || raw?.module_title || null,
+    knowledge_point_id: raw?.knowledge_point_id || null,
+    knowledge_point_title: raw?.knowledge_point_title || raw?.knowledge_point_name || null,
+    knowledge_point_name: raw?.knowledge_point_name || raw?.knowledge_point_title || null,
+    knowledge_point_type: raw?.knowledge_point_type || null,
+    status: raw?.status || null,
+    gate: raw?.gate || null,
+    mastery: raw?.mastery ?? null,
+    threshold: raw?.threshold ?? null,
+    reason: raw?.reason || '',
+    prompt: raw?.prompt || raw?.pending_prompt || null,
+    pending_prompt: raw?.pending_prompt || raw?.prompt || null
+  }
+}
+
+function normalizeModules(raw: RawMasteryDetail): MasteryModule[] {
+  if (raw.modules) return raw.modules
+  return (raw.map?.modules ?? []).map((module) => ({
+    id: module.id,
+    title: module.title || module.name || module.id,
+    name: module.name || module.title || module.id,
+    summary: module.summary || module.description || '',
+    description: module.description || module.summary || '',
+    mastered: module.mastered,
+    total: module.total,
+    knowledge_points: (module.knowledge_points ?? []).map((point) => ({
+      id: point.id,
+      title: point.title || point.name || point.id,
+      name: point.name || point.title || point.id,
+      description: point.description || '',
+      knowledge_type: point.knowledge_type || point.type || 'concept',
+      type: point.type || point.knowledge_type || 'concept',
+      status: point.status || 'new',
+      mastery_level: point.mastery_level ?? Math.round((point.mastery ?? 0) * 100),
+      mastery: point.mastery ?? (point.mastery_level ?? 0) / 100,
+      dependencies: point.dependencies ?? [],
+      review_due: point.review_due ?? null,
+      has_pending_question: point.has_pending_question ?? false
+    }))
+  }))
+}
+
+function normalizeMasteryDetail(raw: RawMasteryDetail): MasteryDocumentDetail {
+  const progress = normalizeProgress(
+    raw.map?.counts ?? raw.counts,
+    raw.map?.due_reviews ?? raw.due_reviews,
+    raw.map?.complete
+  )
+  return {
+    ...normalizeMasterySummary({ ...raw, progress }),
+    modules: normalizeModules(raw),
+    next_step: normalizeNextStep(raw.next_step ?? raw.next),
+    build_warnings: raw.build_warnings ?? []
+  }
+}
+
 // ============================================================
 //  1. 分页查询文档列表
 // ============================================================
@@ -471,8 +611,8 @@ export async function getMasteryDocuments(): Promise<{ documents: MasteryDocumen
     syncMockMasteryWithDocuments()
     return { documents: mockMasteryDocuments }
   }
-  const resp = await api.get<{ documents: MasteryDocumentSummary[] }>('/mastery/documents')
-  return resp.data
+  const resp = await api.get<{ documents: RawMasterySummary[] }>('/mastery/documents')
+  return { documents: resp.data.documents.map(normalizeMasterySummary) }
 }
 
 export async function getMasteryDocument(docId: string): Promise<MasteryDocumentDetail> {
@@ -480,8 +620,8 @@ export async function getMasteryDocument(docId: string): Promise<MasteryDocument
     await delay(160)
     return getMockMasteryDetail(docId)
   }
-  const resp = await api.get<MasteryDocumentDetail>(`/mastery/documents/${encodeURIComponent(docId)}`)
-  return resp.data
+  const resp = await api.get<RawMasteryDetail>(`/mastery/documents/${encodeURIComponent(docId)}`)
+  return normalizeMasteryDetail(resp.data)
 }
 
 export async function buildMasteryDocument(docId: string): Promise<MasteryDocumentDetail> {
@@ -491,8 +631,8 @@ export async function buildMasteryDocument(docId: string): Promise<MasteryDocume
     detail.build_status = 'ready'
     return detail
   }
-  const resp = await api.post<MasteryDocumentDetail>(`/mastery/documents/${encodeURIComponent(docId)}/build`)
-  return resp.data
+  const resp = await api.post<RawMasteryDetail>(`/mastery/documents/${encodeURIComponent(docId)}/build`)
+  return normalizeMasteryDetail(resp.data)
 }
 
 export async function studyKnowledgePoint(
@@ -509,10 +649,35 @@ export async function studyKnowledgePoint(
       next_step: detail.next_step
     }
   }
-  const resp = await api.post<MasteryStudyResponse>(
+  const resp = await api.post<{
+    doc_id: string
+    knowledge_point_id: string
+    title: string
+    description: string
+    explanation: string
+    dependencies: string[]
+  }>(
     `/mastery/documents/${encodeURIComponent(docId)}/study/${encodeURIComponent(knowledgePointId)}`
   )
-  return resp.data
+  return {
+    ...resp.data,
+    knowledge_point: {
+      id: resp.data.knowledge_point_id,
+      title: resp.data.title,
+      name: resp.data.title,
+      description: resp.data.description,
+      knowledge_type: 'concept',
+      type: 'concept',
+      status: 'learning',
+      mastery_level: 0,
+      mastery: 0,
+      dependencies: resp.data.dependencies,
+      review_due: null,
+      has_pending_question: false
+    },
+    study_prompt: resp.data.explanation,
+    next_step: normalizeNextStep()
+  }
 }
 
 export async function createMasteryQuiz(
@@ -530,10 +695,21 @@ export async function createMasteryQuiz(
       next_step: detail.next_step
     }
   }
-  const resp = await api.post<MasteryQuizResponse>(
+  const resp = await api.post<{
+    question_id: string
+    knowledge_point_id: string
+    prompt: string
+    question_type: string
+    options: string[]
+  }>(
     `/mastery/documents/${encodeURIComponent(docId)}/quiz/${encodeURIComponent(knowledgePointId)}`
   )
-  return resp.data
+  return {
+    ...resp.data,
+    question: resp.data.prompt,
+    expected_points: [],
+    next_step: normalizeNextStep({ action: 'answer_pending', knowledge_point_id: resp.data.knowledge_point_id, pending_prompt: resp.data.prompt })
+  }
 }
 
 export async function gradeMasteryAnswer(
@@ -551,11 +727,27 @@ export async function gradeMasteryAnswer(
       document: getMockMasteryDetail(docId)
     }
   }
-  const resp = await api.post<MasteryGradeResponse>(
+  const resp = await api.post<{
+    is_correct: boolean
+    mastery: number
+    mastered: boolean
+    next: Partial<MasteryNextStep>
+  }>(
     `/mastery/documents/${encodeURIComponent(docId)}/grade`,
     { answer }
   )
-  return resp.data
+  const document = await getMasteryDocument(docId)
+  return {
+    passed: resp.data.is_correct,
+    is_correct: resp.data.is_correct,
+    score: Math.round(resp.data.mastery * 100),
+    mastery: resp.data.mastery,
+    mastered: resp.data.mastered,
+    feedback: resp.data.is_correct ? '回答通过，掌握度已更新。' : '回答未通过，请补充关键定义或例子后再试。',
+    retry_question: resp.data.is_correct ? null : '请重新组织答案，覆盖定义、依赖关系和应用场景。',
+    next_step: normalizeNextStep(resp.data.next),
+    document
+  }
 }
 
 export async function assessKnowledgePoint(
@@ -572,11 +764,19 @@ export async function assessKnowledgePoint(
       document: getMockMasteryDetail(docId)
     }
   }
-  const resp = await api.post<MasteryAssessResponse>(
+  const resp = await api.post<{
+    passed: boolean
+    next: Partial<MasteryNextStep>
+  }>(
     `/mastery/documents/${encodeURIComponent(docId)}/assess`,
     { knowledge_point_id: knowledgePointId, passed, feedback }
   )
-  return resp.data
+  const document = await getMasteryDocument(docId)
+  return {
+    passed: resp.data.passed,
+    next_step: normalizeNextStep(resp.data.next),
+    document
+  }
 }
 
 export async function resetMasteryDocument(docId: string): Promise<MasteryDocumentDetail> {
@@ -584,8 +784,8 @@ export async function resetMasteryDocument(docId: string): Promise<MasteryDocume
     await delay(180)
     return getMockMasteryDetail(docId)
   }
-  const resp = await api.post<MasteryDocumentDetail>(`/mastery/documents/${encodeURIComponent(docId)}/reset`)
-  return resp.data
+  const resp = await api.post<RawMasteryDetail>(`/mastery/documents/${encodeURIComponent(docId)}/reset`)
+  return normalizeMasteryDetail(resp.data)
 }
 
 export async function deleteMasteryDocument(docId: string): Promise<{ status: 'success' }> {

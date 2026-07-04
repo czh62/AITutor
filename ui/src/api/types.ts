@@ -168,7 +168,14 @@ export interface GraphData {
 //  知识点学习路径（对齐后端 src/schemas/mastery.py）
 // ============================================================
 
-export type MasteryBuildStatus = 'waiting_rag' | 'building' | 'ready' | 'build_failed' | 'rag_failed'
+export type MasteryBuildStatus =
+  | 'not_started'
+  | 'queued'
+  | 'waiting_rag'
+  | 'building'
+  | 'ready'
+  | 'build_failed'
+  | 'rag_failed'
 export type MasteryKnowledgeType = 'memory' | 'concept' | 'procedure' | 'design'
 export type MasteryObjectiveStatus = 'new' | 'learning' | 'mastered'
 export type MasteryNextStepAction =
@@ -194,7 +201,7 @@ export interface MasteryDocumentSummary {
   doc_id: string
   title: string
   source_file: string
-  rag_status: DocStatus
+  rag_status: DocStatus | string
   build_status: MasteryBuildStatus
   build_error?: string | null
   updated_at: string
@@ -204,10 +211,13 @@ export interface MasteryDocumentSummary {
 export interface MasteryKnowledgePoint {
   id: string
   title: string
+  name?: string
   description: string
   knowledge_type: MasteryKnowledgeType
+  type?: MasteryKnowledgeType
   status: MasteryObjectiveStatus
   mastery_level: number
+  mastery?: number
   dependencies: string[]
   review_due?: string | null
   has_pending_question: boolean
@@ -216,7 +226,11 @@ export interface MasteryKnowledgePoint {
 export interface MasteryModule {
   id: string
   title: string
+  name?: string
   summary: string
+  description?: string
+  mastered?: number
+  total?: number
   knowledge_points: MasteryKnowledgePoint[]
 }
 
@@ -224,10 +238,18 @@ export interface MasteryNextStep {
   action: MasteryNextStepAction
   module_id?: string | null
   module_title?: string | null
+  module_name?: string | null
   knowledge_point_id?: string | null
   knowledge_point_title?: string | null
+  knowledge_point_name?: string | null
+  knowledge_point_type?: string | null
+  status?: string | null
+  gate?: string | null
+  mastery?: number | null
+  threshold?: number | null
   reason: string
   prompt?: string | null
+  pending_prompt?: string | null
 }
 
 export interface MasteryDocumentDetail extends MasteryDocumentSummary {
@@ -237,21 +259,34 @@ export interface MasteryDocumentDetail extends MasteryDocumentSummary {
 }
 
 export interface MasteryStudyResponse {
+  doc_id?: string
+  knowledge_point_id?: string
+  title?: string
+  description?: string
+  explanation?: string
+  dependencies?: string[]
   knowledge_point: MasteryKnowledgePoint
   study_prompt: string
   next_step: MasteryNextStep
 }
 
 export interface MasteryQuizResponse {
+  question_id?: string
   knowledge_point_id: string
   question: string
-  expected_points: string[]
+  prompt?: string
+  question_type?: string
+  options?: string[]
+  expected_points?: string[]
   next_step: MasteryNextStep
 }
 
 export interface MasteryGradeResponse {
   passed: boolean
+  is_correct?: boolean
   score: number
+  mastery?: number
+  mastered?: boolean
   feedback: string
   retry_question?: string | null
   next_step: MasteryNextStep
