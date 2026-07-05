@@ -44,6 +44,9 @@ services:
     ports:
       - "5174:5174"
     command: npm run dev -- --host 0.0.0.0 --port 5174
+    volumes:
+      - ./ui:/app/ui
+      - /app/ui/node_modules
     environment:
       VITE_BACKEND_PROXY_TARGET: "http://backend:8000"
     depends_on:
