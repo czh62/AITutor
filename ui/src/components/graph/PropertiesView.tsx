@@ -3,8 +3,8 @@ import { useGraphStore, RawNodeType, RawEdgeType } from '@/stores/graph'
 import { PropertyValue } from './PropertyRowComponents'
 
 /**
- * 只读属性面板：显示选中/悬停的节点或边信息。
- * （剥离了 expand/prune 与属性编辑能力。）
+ * 只读Properties面板：显示Select中/悬停的Nodes或Edges信息。
+ * （剥离了 expand/prune 与Properties编辑能力。）
  */
 const PropertiesView = () => {
   const selectedNode = useGraphStore.use.selectedNode()
@@ -97,7 +97,7 @@ const refineNodeProperties = (node: RawNodeType): NodeType => {
           const neighbour = state.rawGraph.getNode(neighbourId)
           if (neighbour) {
             relationships.push({
-              type: '相邻',
+              type: 'Adjacent',
               id: neighbourId,
               label: neighbour.properties['entity_id']
                 ? neighbour.properties['entity_id']
@@ -159,7 +159,7 @@ const PropertyRow = ({
   const formattedValue = formatValue(value)
   let tooltip = formattedValue
   if (name === 'source_id' && truncate) {
-    tooltip += `\n(已截断: ${truncate})`
+    tooltip += `\n(Truncated: ${truncate})`
   }
 
   return (
@@ -177,19 +177,19 @@ const PropertyRow = ({
 const NodePropertiesView = ({ node }: { node: NodeType }) => {
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-md pl-1 font-bold tracking-wide text-blue-700">节点</h3>
+      <h3 className="text-md pl-1 font-bold tracking-wide text-blue-700">Nodes</h3>
       <div className="bg-primary/5 max-h-96 overflow-auto rounded p-1">
         <PropertyRow name="ID" value={String(node.id)} />
         <PropertyRow
-          name="标签"
+          name="Labels"
           value={node.labels.join(', ')}
           onClick={() => {
             useGraphStore.getState().setSelectedNode(node.id, true)
           }}
         />
-        <PropertyRow name="度数" value={node.degree} />
+        <PropertyRow name="Degree" value={node.degree} />
       </div>
-      <h3 className="text-md pl-1 font-bold tracking-wide text-amber-700">属性</h3>
+      <h3 className="text-md pl-1 font-bold tracking-wide text-amber-700">Properties</h3>
       <div className="bg-primary/5 max-h-96 overflow-auto rounded p-1">
         {Object.keys(node.properties)
           .sort()
@@ -207,7 +207,7 @@ const NodePropertiesView = ({ node }: { node: NodeType }) => {
       </div>
       {node.relationships.length > 0 && (
         <>
-          <h3 className="text-md pl-1 font-bold tracking-wide text-emerald-700">关系</h3>
+          <h3 className="text-md pl-1 font-bold tracking-wide text-emerald-700">Relations</h3>
           <div className="bg-primary/5 max-h-96 overflow-auto rounded p-1">
             {node.relationships.map(({ type, id, label }) => {
               return (
@@ -231,26 +231,26 @@ const NodePropertiesView = ({ node }: { node: NodeType }) => {
 const EdgePropertiesView = ({ edge }: { edge: EdgeType }) => {
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-md pl-1 font-bold tracking-wide text-violet-700">边</h3>
+      <h3 className="text-md pl-1 font-bold tracking-wide text-violet-700">Edges</h3>
       <div className="bg-primary/5 max-h-96 overflow-auto rounded p-1">
         <PropertyRow name="ID" value={edge.id} />
-        {edge.type && <PropertyRow name="类型" value={edge.type} />}
+        {edge.type && <PropertyRow name="Type" value={edge.type} />}
         <PropertyRow
-          name="源节点"
+          name="Source Node"
           value={edge.sourceNode ? edge.sourceNode.labels.join(', ') : edge.source}
           onClick={() => {
             useGraphStore.getState().setSelectedNode(edge.source, true)
           }}
         />
         <PropertyRow
-          name="目标节点"
+          name="Target Node"
           value={edge.targetNode ? edge.targetNode.labels.join(', ') : edge.target}
           onClick={() => {
             useGraphStore.getState().setSelectedNode(edge.target, true)
           }}
         />
       </div>
-      <h3 className="text-md pl-1 font-bold tracking-wide text-amber-700">属性</h3>
+      <h3 className="text-md pl-1 font-bold tracking-wide text-amber-700">Properties</h3>
       <div className="bg-primary/5 max-h-96 overflow-auto rounded p-1">
         {Object.keys(edge.properties)
           .sort()

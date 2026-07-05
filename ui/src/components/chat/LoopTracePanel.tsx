@@ -6,14 +6,14 @@ import type { LoopTrace, LoopStep } from '@/api/types'
 /**
  * AgentLoop 思维链面板。
  *
- * 渲染每轮查询改写的思维过程：
- * - 每轮为一个可折叠卡片，显示查询、评估思考、质量判定
- * - insufficient 的轮次高亮显示改写查询
+ * 渲染每轮Query改写的思维过程：
+ * - 每轮为一个可折叠卡片，显示Query、EvaluationThinking、质量判定
+ * - insufficient 的轮次高亮显示改写Query
  * - sufficient / forced 的最后一轮用不同样式标记
- * - 联网搜索结果单独显示（搜索查询 + 结果摘要）
+ * - Web SearchResult单独显示（搜索Query + Result摘要）
  * - 流式进行中默认展开；完成后默认折叠
  *
- * 整体外观：圆角边框 + 浅背景，与 ThinkingBlock 风格一致。
+ * 整体外观：圆角Edges框 + 浅背景，与 ThinkingBlock 风格一致。
  */
 interface Props {
   trace: LoopTrace
@@ -37,11 +37,11 @@ export default function LoopTracePanel({ trace, isStreaming }: Props) {
         <ChevronRightIcon className={cn('h-3 w-3 shrink-0 transition-transform', open && 'rotate-90')} />
         <SearchIcon className="h-3 w-3 shrink-0 text-emerald-500" />
         <span>
-          思维链（{trace.rounds} 轮
-          {trace.completed ? '，已完成' : '，强制结束'}
-          {lastQuality === 'sufficient' && '，充分'}
-          {hasInsufficient && '，有改写'}
-          {hasWebSearch && '，有搜索'}
+          Trace ({trace.rounds} rounds
+          {trace.completed ? ' completed' : ' forced stop'}
+          {lastQuality === 'sufficient' && ' sufficient'}
+          {hasInsufficient && ' rewritten'}
+          {hasWebSearch && ' searched'}
          ）
         </span>
         {isStreaming && <span className="ml-auto inline-block animate-pulse">▌</span>}
@@ -87,19 +87,19 @@ function StepCard({ step }: { step: LoopStep }) {
           isForced && 'text-red-500 dark:text-red-400',
           isShortQuery && 'text-blue-500 dark:text-blue-400',
         )}>
-          {isSufficient ? '充分' : isInsufficient ? '不充分' : isShortQuery ? '短查询' : '强制结束'}
+          {isSufficient ? 'Sufficient' : isInsufficient ? 'Insufficient' : isShortQuery ? 'Short Query' : 'Forced Stop'}
         </span>
       </div>
 
-      {/* 查询 */}
+      {/* Query */}
       <div className="mt-1 flex items-start gap-1 text-muted-foreground">
         <SearchIcon className="h-2.5 w-2.5 shrink-0 mt-0.5 text-blue-400" />
         <span className="whitespace-pre-wrap break-words">
-          查询: <span className="text-foreground">{step.query}</span>
+          Query: <span className="text-foreground">{step.query}</span>
         </span>
       </div>
 
-      {/* 思考 */}
+      {/* Thinking */}
       {step.thinking && (
         <div className="mt-0.5 flex items-start gap-1 text-muted-foreground">
           <BrainCircuitIcon className="h-2.5 w-2.5 shrink-0 mt-0.5 text-violet-400" />
@@ -107,12 +107,12 @@ function StepCard({ step }: { step: LoopStep }) {
         </div>
       )}
 
-      {/* 联网搜索 */}
+      {/* Web Search */}
       {step.webSearchQuery && (
         <div className="mt-0.5 flex items-start gap-1 text-blue-500 dark:text-blue-400">
           <GlobeIcon className="h-2.5 w-2.5 shrink-0 mt-0.5" />
           <span className="whitespace-pre-wrap break-words font-medium">
-            搜索: {step.webSearchQuery}
+            Search: {step.webSearchQuery}
           </span>
         </div>
       )}
@@ -126,12 +126,12 @@ function StepCard({ step }: { step: LoopStep }) {
         </div>
       )}
 
-      {/* 改写查询 */}
+      {/* 改写Query */}
       {step.rewrittenQuery && (
         <div className="mt-0.5 flex items-start gap-1 text-amber-600 dark:text-amber-400">
           <PencilIcon className="h-2.5 w-2.5 shrink-0 mt-0.5" />
           <span className="whitespace-pre-wrap break-words font-medium">
-            改写: {step.rewrittenQuery}
+            Rewrite: {step.rewrittenQuery}
           </span>
         </div>
       )}

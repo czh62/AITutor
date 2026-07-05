@@ -1,12 +1,12 @@
 /**
- * QuizViewer — 聚合出题组件。
+ * QuizViewer — 聚合Quiz组件。
  *
- * 替代原来的逐题 QuizCard 列表，参照 DeepTutor QuizViewer 的聚合布局：
+ * 替代原来的逐题 QuizCard 列表，参照 DeepTutor QuizViewer 的聚合Layout：
  * - 导航 chips（Q1/Q2/Q3...）+ 前进后退箭头 + 进度条 + 完成计数
- * - 一道一道作答（按题型切换输入方式）
- * - 提交后自动判题（choice/concept/精确匹配的 fill_in_blank）或 AI 评判（主观/语义填空题）
- * - 答案回顾区：参考答案 + AI 评判 双 tab
- * - 追问讲解：inline mini 聊天区域
+ * - 一道一道作答（按Question Types切换输入方式）
+ * - 提交后Auto判题（choice/concept/精确匹配的 fill_in_blank）或 AI Grading（主观/语义Fill in the Blank）
+ * - 答案回顾区：Reference Answer + AI Grading 双 tab
+ * - Ask Follow-up：inline mini 聊天区域
  */
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import {
@@ -78,7 +78,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
     }
   }, [])
 
-  // 从 store 获取作答和判词状态
+  // 从 store 获取作答和判词Status
   const message = useQAStore((s) => s.messages.find((m) => m.id === messageId))
   const updateMessage = useQAStore((s) => s.updateMessage)
 
@@ -95,7 +95,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
   )
   const progressPercent = total > 0 ? (completedCount / total) * 100 : 0
 
-  // ── 更新作答状态 ──────────────────────────────────────
+  // ── 更新作答Status ──────────────────────────────────────
   const updateAnswer = useCallback(
     (patch: Partial<QuizAnswerState>) => {
       const current = answers[idx] ?? EMPTY_ANSWER
@@ -106,14 +106,14 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
     [answers, idx, messageId, updateMessage],
   )
 
-  // ── 提交答案 ──────────────────────────────────────────
+  // ── Submit Answer ──────────────────────────────────────────
   const handleSubmit = useCallback(() => {
     if (!ans.selected && !ans.typed.trim()) return
     updateAnswer({ submitted: true })
     setReviewOpen(true)
   }, [ans, updateAnswer])
 
-  // ── 重置答案 ──────────────────────────────────────────
+  // ── Reset答案 ──────────────────────────────────────────
   const handleRetry = useCallback(() => {
     updateAnswer({ selected: null, typed: '', submitted: false })
     // 清除判词 — 从 store 实时读取避免 stale closure
@@ -126,14 +126,14 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
     setShowFollowup(false)
   }, [idx, messageId, updateAnswer, updateMessage])
 
-  // ── AI 评判 ──────────────────────────────────────────
+  // ── AI Grading ──────────────────────────────────────────
   const handleAiJudge = useCallback(async () => {
     if (judgment.isStreaming) return
 
     const controller = new AbortController()
     judgeAbortRef.current = controller
 
-    // 设置流式状态
+    // 设置流式Status
     updateMessage(messageId, {
       quizJudgments: { ...judgments, [idx]: { text: '', isStreaming: true, error: null } },
     })
@@ -152,7 +152,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
           language: 'zh',
         },
         {
-          // 从 store 实时读取最新状态，避免 stale closure
+          // 从 store 实时读取最新Status，避免 stale closure
           onChunk: (text) => {
             const currentMsg = useQAStore.getState().messages.find((m) => m.id === messageId)
             const currentJudgments = currentMsg?.quizJudgments ?? {}
@@ -190,7 +190,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
     }
   }, [q, ans, judgment, judgments, idx, messageId, updateMessage])
 
-  // ── 追问讲解 ──────────────────────────────────────────
+  // ── Ask Follow-up ──────────────────────────────────────────
   const handleFollowupSend = useCallback(async () => {
     const input = followupInput.trim()
     if (!input || followupStreaming) return
@@ -204,7 +204,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
     }
     setFollowupMessages((prev) => [...prev, userMsg])
 
-    // 添加空的 AI 回复消息
+    // 添加空的 AI Reply消息
     const aiMsgId = `fu_${Date.now()}_ai`
     const aiMsg: FollowupMessage = {
       id: aiMsgId,
@@ -252,7 +252,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
             setFollowupMessages((prev) =>
               prev.map((m) =>
                 m.id === aiMsgId
-                  ? { ...m, content: `错误: ${msg}`, isStreaming: false }
+                  ? { ...m, content: `Incorrect: ${msg}`, isStreaming: false }
                   : m,
               ),
             )
@@ -267,7 +267,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
       setFollowupMessages((prev) =>
         prev.map((m) =>
           m.id === aiMsgId
-            ? { ...m, content: `错误: ${String(err)}`, isStreaming: false }
+            ? { ...m, content: `Incorrect: ${String(err)}`, isStreaming: false }
             : m,
         ),
       )
@@ -297,42 +297,42 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
     }
   }
 
-  // 当前选中题目 → 蓝色高亮（不与正误颜色混淆）
+  // 当前Select中题目 → 蓝色高亮（不与正误颜色混淆）
   const activeChipStyle = 'bg-blue-500/20 text-blue-700 border-blue-500/50 ring-1 ring-blue-500/30'
 
   const renderReviewBadge = (kind: 'correct' | 'partial' | 'incorrect' | 'needs-ai') => {
     if (kind === 'correct') {
       return (
         <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-sm font-medium text-emerald-700">
-          <Check className="h-4 w-4" /> 正确
+          <Check className="h-4 w-4" /> Correct
         </span>
       )
     }
     if (kind === 'partial') {
       return (
         <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2.5 py-1 text-sm font-medium text-amber-700">
-          部分正确
+          Partially Correct
         </span>
       )
     }
     if (kind === 'incorrect') {
       return (
         <span className="inline-flex items-center gap-1 rounded-md bg-red-500/15 px-2.5 py-1 text-sm font-medium text-red-700">
-          <X className="h-4 w-4" /> 错误
+          <X className="h-4 w-4" /> Incorrect
         </span>
       )
     }
     return (
       <span className="inline-flex items-center gap-1 rounded-md bg-blue-500/15 px-2.5 py-1 text-sm font-medium text-blue-700">
-        待 AI 评判
+        Needs AI Grading
       </span>
     )
   }
 
-  // ── 题型对应作答区域 ──────────────────────────────────
+  // ── Question Types对应作答区域 ──────────────────────────────────
   const renderAnswerInput = () => {
     if (ans.submitted) {
-      // ── 已提交：客观题继续显示选项（禁用），用颜色标注正误 ──
+      // ── 已提交：客观题继续显示Select项（禁用），用颜色标注正误 ──
       switch (q.question_type) {
         case 'choice': {
           const correctKey = resolveChoiceAnswerKey(q.correct_answer, q.options)
@@ -343,22 +343,22 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
               <div className="flex items-center gap-2 mb-2">
                 {correct ? (
                   <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-sm font-medium text-emerald-700">
-                    <Check className="h-4 w-4" /> 正确
+                    <Check className="h-4 w-4" /> Correct
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded-md bg-red-500/15 px-2.5 py-1 text-sm font-medium text-red-700">
-                    <X className="h-4 w-4" /> 错误
+                    <X className="h-4 w-4" /> Incorrect
                   </span>
                 )}
               </div>
-              {/* 选项列表（禁用），颜色标注：正确选项绿色，用户错选红色 */}
+              {/* Select项列表（禁用），颜色标注：CorrectSelect项绿色，用户错Select红色 */}
               <div className="space-y-1.5">
                 {(['A', 'B', 'C', 'D'] as const).map((key) => {
                   const value = q.options?.[key]
                   if (!value) return null
                   const isCorrectOption = key === correctKey
                   const isUserSelected = ans.selected === key
-                  // 用户选了错误答案 → 红色；正确选项 → 绿色；其余 → 灰色
+                  // 用户Select了Incorrect答案 → 红色；CorrectSelect项 → 绿色；其余 → 灰色
                   let optionStyle: string
                   if (isUserSelected && isCorrectOption) {
                     optionStyle = 'bg-emerald-500/10 border-emerald-500/40 text-emerald-700 font-medium'
@@ -383,7 +383,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
                           {value}
                         </ReactMarkdown>
                       </span>
-                      {/* 正确选项标记 ✓ */}
+                      {/* CorrectSelect项标记 ✓ */}
                       {isCorrectOption && !isUserSelected && (
                         <Check className="h-4 w-4 text-emerald-600 shrink-0 ml-auto" />
                       )}
@@ -404,15 +404,15 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
               <div className="flex items-center gap-2 mb-2">
                 {correct ? (
                   <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 text-sm font-medium text-emerald-700">
-                    <Check className="h-4 w-4" /> 正确
+                    <Check className="h-4 w-4" /> Correct
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded-md bg-red-500/15 px-2.5 py-1 text-sm font-medium text-red-700">
-                    <X className="h-4 w-4" /> 错误
+                    <X className="h-4 w-4" /> Incorrect
                   </span>
                 )}
               </div>
-              {/* 判断题按钮（禁用），颜色标注 */}
+              {/* True / False按钮（禁用），颜色标注 */}
               <div className="flex items-center gap-3">
                 {(['true', 'false'] as const).map((val) => {
                   const isCorrectOption = val === correctAnswerNormalized
@@ -435,7 +435,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
                         btnStyle,
                       )}
                     >
-                      {val === 'true' ? '正确' : '错误'}
+                      {val === 'true' ? 'Correct' : 'Incorrect'}
                       {isCorrectOption && !isUserSelected && (
                         <Check className="h-3.5 w-3.5" />
                       )}
@@ -452,12 +452,12 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
           return (
             <div className="flex items-center gap-3 mt-2">
               {renderReviewBadge(reviewKind)}
-              <span className="text-sm text-foreground/80">你的答案：{ans.typed.trim()}</span>
+              <span className="text-sm text-foreground/80">Your answer: {ans.typed.trim()}</span>
             </div>
           )
         }
 
-        // 主观题：已提交标记 + 用户回答
+        // 主观题：已提交标记 + 用户Answer
         default: {
           const userAnswerText = getUserAnswerDisplay(q, ans)
           return (
@@ -478,7 +478,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
             {(['A', 'B', 'C', 'D'] as const).map((key) => {
               const value = q.options?.[key]
               if (!value) return null
-              // 选中选项统一蓝色，不与正误颜色混淆
+              // Select中Select项统一蓝色，不与正误颜色混淆
               return (
                 <button
                   key={key}
@@ -506,7 +506,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
       case 'concept':
         return (
           <div className="flex items-center gap-3 mt-2">
-            {/* 选中选项统一蓝色，不与正误颜色混淆 */}
+            {/* Select中Select项统一蓝色，不与正误颜色混淆 */}
             <button
               type="button"
               onClick={() => updateAnswer({ selected: 'true' })}
@@ -517,7 +517,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
                   : 'bg-muted/30 border-border/30 hover:bg-muted/50',
               )}
             >
-              正确
+              Correct
             </button>
             <button
               type="button"
@@ -529,7 +529,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
                   : 'bg-muted/30 border-border/30 hover:bg-muted/50',
               )}
             >
-              错误
+              Incorrect
             </button>
           </div>
         )
@@ -540,7 +540,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
             type="text"
             value={ans.typed}
             onChange={(e) => updateAnswer({ typed: e.target.value })}
-            placeholder="输入答案..."
+            placeholder="Enter your answer..."
             className="mt-2 w-full rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-blue-500/50 focus:outline-none"
           />
         )
@@ -550,7 +550,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
           <textarea
             value={ans.typed}
             onChange={(e) => updateAnswer({ typed: e.target.value })}
-            placeholder="输入简要回答..."
+            placeholder="Enter a short answer..."
             rows={3}
             className="mt-2 w-full rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-blue-500/50 focus:outline-none resize-y"
           />
@@ -561,7 +561,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
           <textarea
             value={ans.typed}
             onChange={(e) => updateAnswer({ typed: e.target.value })}
-            placeholder="输入论述内容..."
+            placeholder="Enter your response..."
             rows={5}
             className="mt-2 w-full rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-blue-500/50 focus:outline-none resize-y"
           />
@@ -572,7 +572,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
           <textarea
             value={ans.typed}
             onChange={(e) => updateAnswer({ typed: e.target.value })}
-            placeholder="输入代码..."
+            placeholder="Enter code..."
             rows={6}
             className="mt-2 w-full rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:border-blue-500/50 focus:outline-none resize-y"
           />
@@ -583,25 +583,25 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
     }
   }
 
-  // ── 格式化用户回答（提交后显示） ──────────────────────
+  // ── 格式化用户Answer（提交后显示） ──────────────────────
   function getUserAnswerDisplay(question: QuizQuestion, answer: QuizAnswerState): string {
     if (question.question_type === 'choice' && answer.selected && question.options) {
       const optionText = question.options[answer.selected]
-      return optionText ? `你的选择：${answer.selected}. ${optionText}` : `你的选择：${answer.selected}`
+      return optionText ? `Your choice: ${answer.selected}. ${optionText}` : `Your choice: ${answer.selected}`
     }
     if (question.question_type === 'concept') {
-      return answer.selected === 'true' ? '你的回答：正确' : answer.selected === 'false' ? '你的回答：错误' : '未作答'
+      return answer.selected === 'true' ? 'Your response: Correct' : answer.selected === 'false' ? 'Your response: Incorrect' : 'Not answered'
     }
     if (answer.typed.trim()) {
-      const label = question.question_type === 'fill_in_blank' ? '你的答案' : '你的回答'
+      const label = question.question_type === 'fill_in_blank' ? 'Your answer' : 'Your response'
       return `${label}：${answer.typed.trim()}`
     }
-    return '未作答'
+    return 'Not answered'
   }
 
-  // ── 题面 + 题型标签 ──────────────────────────────────
+  // ──面 + Question TypesLabels ──────────────────────────────────
   const typeLabel = QUIZ_TYPE_LABELS[q.question_type] || q.question_type
-  const diffLabel = q.difficulty === 'easy' ? '简单' : q.difficulty === 'medium' ? '中等' : q.difficulty === 'hard' ? '困难' : ''
+  const diffLabel = q.difficulty === 'easy' ? 'Easy' : q.difficulty === 'medium' ? 'Medium' : q.difficulty === 'hard' ? 'Hard' : ''
 
   // ── 格式化答案 ──────────────────────────────────────
   function formatAnswer(q: QuizQuestion): string {
@@ -610,7 +610,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
       return optionText ? `${q.correct_answer}. ${optionText}` : q.correct_answer
     }
     if (q.question_type === 'concept') {
-      return resolveConceptAnswer(q.correct_answer) === 'true' ? '正确' : '错误'
+      return resolveConceptAnswer(q.correct_answer) === 'true' ? 'Correct' : 'Incorrect'
     }
     return q.correct_answer
   }
@@ -623,7 +623,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <span className="font-medium">{completedCount}/{total}</span>
-            <span>已完成</span>
+            <span>Completed</span>
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -653,7 +653,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
           />
         </div>
 
-        {/* 题号 chips */}
+        {/*号 chips */}
         <div className="mt-2 flex items-center gap-1.5 overflow-x-auto">
           {questions.map((_, i) => (
             <button
@@ -673,12 +673,12 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
         </div>
       </div>
 
-      {/* ── 题面区域 ─────────────────────────────────── */}
+      {/* ──面区域 ─────────────────────────────────── */}
       <div className="px-4 py-3">
-        {/* 题型/难度标签 */}
+        {/* Question Types/DifficultyLabels */}
         <div className="flex items-center gap-2 mb-2">
           <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-            第 {idx + 1} 题
+            Question {idx + 1}
           </span>
           <span className="text-xs font-medium text-muted-foreground">{typeLabel}</span>
           {diffLabel && (
@@ -689,7 +689,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
           )}
         </div>
 
-        {/* 题面 Markdown */}
+        {/*面 Markdown */}
         <div className="text-sm leading-relaxed text-foreground">
           <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
             {q.question}
@@ -708,7 +708,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
               disabled={!ans.selected && !ans.typed.trim()}
               className="rounded-lg bg-emerald-500/80 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-500/80 transition-colors"
             >
-              提交答案
+              Submit Answer
             </button>
           </div>
         ) : (
@@ -718,7 +718,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
               onClick={handleRetry}
               className="rounded-lg border border-border/40 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/30 transition-colors"
             >
-              重答
+              Retry
             </button>
             <button
               type="button"
@@ -733,11 +733,11 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
             >
               {judgment.isStreaming ? (
                 <>
-                  <Loader2 className="h-3 w-3 animate-spin" /> 评判中...
+                  <Loader2 className="h-3 w-3 animate-spin" /> Grading...
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-3 w-3" /> AI 评判
+                  <Sparkles className="h-3 w-3" /> AI Grading
                 </>
               )}
             </button>
@@ -749,7 +749,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
               }}
               className="rounded-lg border border-blue-500/40 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-500/10 transition-colors flex items-center gap-1"
             >
-              <MessageSquarePlus className="h-3 w-3" /> 追问讲解
+              <MessageSquarePlus className="h-3 w-3" /> Ask Follow-up
             </button>
           </div>
         )}
@@ -764,7 +764,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
               className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground py-2 transition-colors"
             >
               {reviewOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              {reviewOpen ? '收起答案回顾' : '展开答案回顾'}
+              {reviewOpen ? 'Hide Answer Review' : 'Show Answer Review'}
             </button>
 
             {reviewOpen && (
@@ -781,7 +781,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
                         : 'text-muted-foreground hover:text-foreground',
                     )}
                   >
-                    参考答案
+                    Reference Answer
                   </button>
                   <button
                     type="button"
@@ -793,24 +793,24 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
                         : 'text-muted-foreground hover:text-foreground',
                     )}
                   >
-                    AI 评判
+                    AI Grading
                   </button>
                 </div>
 
-                {/* 参考答案 tab */}
+                {/* Reference Answer tab */}
                 {answerView === 'reference' && (
                   <div className="space-y-2 text-sm">
                     <div>
-                      <span className="font-semibold text-blue-600">你的回答：</span>
-                      <span className="text-foreground">{getUserAnswerDisplay(q, ans).replace(/^你的(?:选择|答案|回答)：/, '')}</span>
+                      <span className="font-semibold text-blue-600">Your response: </span>
+                      <span className="text-foreground">{getUserAnswerDisplay(q, ans).replace(/^(Your choice: |Your answer: |Your response: )/, '')}</span>
                     </div>
                     <div>
-                      <span className="font-semibold text-emerald-600">答案：</span>
+                      <span className="font-semibold text-emerald-600">Answer: </span>
                       <span className="text-foreground">{formatAnswer(q)}</span>
                     </div>
                     {q.explanation && q.explanation !== 'N/A' && (
                       <div>
-                        <span className="font-semibold text-muted-foreground">解析：</span>
+                        <span className="font-semibold text-muted-foreground">Parsing：</span>
                         <span className="text-foreground">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                             {q.explanation}
@@ -821,7 +821,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
                   </div>
                 )}
 
-                {/* AI 评判 tab */}
+                {/* AI Grading tab */}
                 {answerView === 'judgment' && (
                   <div className="text-sm">
                     {judgment.error ? (
@@ -832,7 +832,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
                       </ReactMarkdown>
                     ) : (
                       <div className="text-muted-foreground italic">
-                        点击「AI 评判」按钮评判当前答案
+                        Click AI Grading to evaluate this answer.
                       </div>
                     )}
                     {judgment.isStreaming && (
@@ -845,11 +845,11 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
           </div>
         )}
 
-        {/* ── 追问讲解 inline 区域 ────────────────────── */}
+        {/* ── Ask Follow-up inline 区域 ────────────────────── */}
         {showFollowup && ans.submitted && (
           <div className="mt-3 border-t border-border/30 pt-3">
             <div className="text-xs font-medium text-blue-700 mb-2 flex items-center gap-1">
-              <MessageSquarePlus className="h-3 w-3" /> 追问讲解
+              <MessageSquarePlus className="h-3 w-3" /> Ask Follow-up
             </div>
 
             {/* 聊天消息流 */}
@@ -892,7 +892,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
                     handleFollowupSend()
                   }
                 }}
-                placeholder="输入追问..."
+                placeholder="Ask a follow-up..."
                 disabled={followupStreaming}
                 className="flex-1 rounded-lg border border-border/40 bg-muted/20 px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-emerald-500/50 focus:outline-none disabled:opacity-40"
               />

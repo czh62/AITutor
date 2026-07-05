@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { useGraphStore } from '@/stores/graph'
 
 /**
- * 高亮选中节点并将相机居中到该节点。
+ * 高亮Select中Nodes并将相机居中到该Nodes。
  */
 const FocusOnNode = ({ node, move }: { node: string | null; move?: boolean }) => {
   const sigma = useSigma()

@@ -41,13 +41,13 @@ interface MasterySidebarProps {
 const MASTERY_DOCUMENTS_CLEARED_EVENT = 'aitutor:mastery-documents-cleared'
 
 const BUILD_STATUS_LABELS: Record<MasteryBuildStatus, string> = {
-  not_started: '处理中',
-  queued: '处理中',
-  waiting_rag: '处理中',
-  building: '构建中',
-  ready: '可学习',
-  build_failed: '构建失败',
-  rag_failed: 'RAG 失败'
+  not_started: 'Processing',
+  queued: 'Processing',
+  waiting_rag: 'Processing',
+  building: 'Building',
+  ready: 'ready to learn',
+  build_failed: 'Build Failed',
+  rag_failed: 'RAG Failed'
 }
 
 function commandId(prefix: string): string {
@@ -148,9 +148,9 @@ function DocumentRow({
       </div>
       <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
         <span>
-          {doc.progress.counts.mastered}/{doc.progress.counts.total} 掌握
+          {doc.progress.counts.mastered}/{doc.progress.counts.total} Mastered
         </span>
-        {doc.progress.due_reviews > 0 && <span>{doc.progress.due_reviews} 个待复习</span>}
+        {doc.progress.due_reviews > 0 && <span>{doc.progress.due_reviews}  due for review</span>}
       </div>
     </button>
   )
@@ -195,7 +195,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
       setDocuments(result.documents)
       setSelectedDocId((current) => current ?? result.documents[0]?.doc_id ?? null)
     } catch (err) {
-      toast.error(`加载知识点失败：${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Failed to load knowledge points: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       if (mountedRef.current) setLoadingDocs(false)
     }
@@ -211,7 +211,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
       const result = await getMasteryDocument(doc.doc_id)
       if (mountedRef.current) setDetail(result)
     } catch (err) {
-      toast.error(`加载知识树失败：${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Failed to load knowledge tree: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       if (mountedRef.current) setLoadingDetail(false)
     }
@@ -299,9 +299,9 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
           knowledgePointId: point.id
         }
       })
-      toast.success('已开始知识点学习')
+      toast.success('Started knowledge point learning')
     } catch (err) {
-      toast.error(`开始学习失败：${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Failed to start learning: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setRunningAction(null)
     }
@@ -312,7 +312,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
     enqueueCommand({
       id: commandId('mastery-followup'),
       kind: 'query',
-      prompt: `我想继续追问刚才的知识点「${activeSelection.point.title}」。请结合当前文档继续带我理解，并先问我一个能暴露理解盲区的问题。`,
+      prompt: `I want to continue discussing the knowledge point "${activeSelection.point.title}". Use the current document to help me understand it, and first ask me one question that can reveal gaps in my understanding.`,
       metadata: {
         source: 'mastery',
         docId: selectedDocument.doc_id,
@@ -327,9 +327,9 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
     try {
       const updated = await selfAssessKnowledgePoint(selectedDocument.doc_id, activeSelection.point.id, true)
       applyDetailUpdate(updated)
-      toast.success('已标记为掌握')
+      toast.success('Marked as mastered')
     } catch (err) {
-      toast.error(`更新学习状态失败：${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Failed to update learning status: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setRunningAction(null)
     }
@@ -344,7 +344,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
       enqueueCommand({
         id: commandId('mastery-quiz'),
         kind: 'quiz',
-        topic: `文档《${selectedDocument.title}》中的知识点「${activeSelection.point.title}」。重点考察：知识点定义、依赖关系、文档中的应用场景。`,
+        topic: `Knowledge point "${activeSelection.point.title}" from document "${selectedDocument.title}". Focus on definition, dependencies, and use cases in the document.`,
         num_questions: 3,
         difficulty: 'auto',
         question_types: [],
@@ -354,9 +354,9 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
           knowledgePointId: activeSelection.point.id
         }
       })
-      toast.success('已开始知识点测验')
+      toast.success('Started knowledge point quiz')
     } catch (err) {
-      toast.error(`开始测验失败：${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Failed to start quiz: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setRunningAction(null)
     }
@@ -368,9 +368,9 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
     try {
       const updated = await scheduleKnowledgePointReview(selectedDocument.doc_id, activeSelection.point.id)
       applyDetailUpdate(updated)
-      toast.success('已加入稍后复习')
+      toast.success('Added to review later')
     } catch (err) {
-      toast.error(`安排复习失败：${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Failed to schedule review: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setRunningAction(null)
     }
@@ -382,8 +382,8 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
         <div className="flex min-w-0 items-center gap-2">
           <BrainCircuitIcon className="h-4 w-4 shrink-0 text-primary" />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">知识点</p>
-            <p className="text-[11px] text-muted-foreground">{readyCount}/{documents.length} 可学习</p>
+            <p className="truncate text-sm font-semibold">Knowledge Points</p>
+            <p className="text-[11px] text-muted-foreground">{readyCount}/{documents.length} ready to learn</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -392,11 +392,11 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
             size="icon"
             onClick={refreshMastery}
             disabled={loadingDocs}
-            tooltip="刷新知识点"
+            tooltip="Refresh knowledge points"
           >
             <RefreshCwIcon className={cn('h-4 w-4', loadingDocs && 'animate-spin')} />
           </Button>
-          <Button variant="ghost" size="icon" onClick={onCollapse} tooltip="收起侧边栏">
+          <Button variant="ghost" size="icon" onClick={onCollapse} tooltip="Collapse sidebar">
             <ChevronLeftIcon className="h-4 w-4" />
           </Button>
         </div>
@@ -406,7 +406,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
         <div className="max-h-56 shrink-0 overflow-y-auto border-b border-border/60 p-2">
           {documents.length === 0 ? (
             <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-              暂无知识点，请先上传并完成文档解析。
+              No knowledge points yet. Upload and process a document first.
             </div>
           ) : (
             <div className="space-y-2">
@@ -424,7 +424,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2">
           {!selectedDocument ? (
-            <div className="py-8 text-center text-xs text-muted-foreground">暂无文档</div>
+            <div className="py-8 text-center text-xs text-muted-foreground">No Documents</div>
           ) : !canRenderTree ? (
             <div className="py-8 text-center">
               <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-md border bg-background">
@@ -432,7 +432,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
               </div>
               <p className="mt-3 text-sm font-medium">{BUILD_STATUS_LABELS[getBuildStatus(selectedDocument)]}</p>
               <p className="mx-auto mt-1 max-w-56 text-xs leading-5 text-muted-foreground">
-                RAG 完成前知识点保持处理中；只有文档状态完成后才会渲染知识树。
+                Knowledge points stay processing until RAG completes. The knowledge tree appears only after the document is completed.
               </p>
               {selectedDocument.build_error && (
                 <p className="mx-auto mt-3 max-w-56 rounded-md border border-red-500/20 bg-red-500/10 p-2 text-xs text-red-600 dark:text-red-300">
@@ -445,19 +445,19 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                 size="sm"
                 onClick={() => setBuildStatusOpen(true)}
               >
-                查看状态
+                View Status
               </Button>
             </div>
           ) : loadingDetail ? (
             <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
               <Loader2Icon className="h-4 w-4 animate-spin" />
-              正在加载知识树
+              Loading knowledge tree
             </div>
           ) : detail ? (
             <div className="py-2">
               <div className="rounded-md border border-border bg-background p-3">
                 <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="text-muted-foreground">学习进度</span>
+                  <span className="text-muted-foreground">Learning Progress</span>
                   <span className="font-medium text-foreground">
                     {detail.progress.counts.mastered}/{detail.progress.counts.total}
                   </span>
@@ -468,15 +468,15 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                 <div className="mt-2 grid grid-cols-3 gap-2 text-center text-[11px]">
                   <div className="rounded-md bg-secondary p-2">
                     <p className="font-semibold text-foreground">{detail.progress.counts.learning}</p>
-                    <p className="text-muted-foreground">学习中</p>
+                    <p className="text-muted-foreground">In Progress</p>
                   </div>
                   <div className="rounded-md bg-secondary p-2">
                     <p className="font-semibold text-foreground">{detail.progress.counts.new}</p>
-                    <p className="text-muted-foreground">未学</p>
+                    <p className="text-muted-foreground">Not Started</p>
                   </div>
                   <div className="rounded-md bg-secondary p-2">
                     <p className="font-semibold text-foreground">{detail.progress.due_reviews}</p>
-                    <p className="text-muted-foreground">复习</p>
+                    <p className="text-muted-foreground">Review</p>
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -486,7 +486,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                     onClick={() => setBuildStatusOpen(true)}
                     className="px-2 text-xs"
                   >
-                    状态
+                    Status
                   </Button>
                   <Button
                     variant="outline"
@@ -495,7 +495,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                     className="px-2 text-xs"
                   >
                     <RotateCcwIcon className="h-3.5 w-3.5" />
-                    重置
+                    Reset
                   </Button>
                 </div>
               </div>
@@ -524,7 +524,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                       disabled={Boolean(runningAction)}
                     >
                       <MessageCircleIcon className="h-3.5 w-3.5" />
-                      继续追问
+                      Continue Discussion
                     </Button>
                     <Button
                       variant="outline"
@@ -534,7 +534,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                       disabled={Boolean(runningAction)}
                     >
                       <CheckCircle2Icon className="h-3.5 w-3.5" />
-                      我理解了
+                      I Understand
                     </Button>
                     <Button
                       variant="outline"
@@ -544,7 +544,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                       disabled={Boolean(runningAction)}
                     >
                       <HelpCircleIcon className="h-3.5 w-3.5" />
-                      出题测验
+                      Quiz
                     </Button>
                     <Button
                       variant="outline"
@@ -554,7 +554,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                       disabled={Boolean(runningAction)}
                     >
                       <ClockIcon className="h-3.5 w-3.5" />
-                      稍后复习
+                      Review Later
                     </Button>
                   </div>
                 </div>
@@ -569,7 +569,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
               </div>
             </div>
           ) : (
-            <div className="py-8 text-center text-xs text-muted-foreground">知识树暂不可用</div>
+            <div className="py-8 text-center text-xs text-muted-foreground">Knowledge tree is unavailable</div>
           )}
         </div>
       </div>

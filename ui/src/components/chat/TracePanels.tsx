@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import type { StreamEvent, LoopEventType } from '@/api/types'
 
 /* ------------------------------------------------------------------ */
-/*  类型与辅助                                                          */
+/*  Type与辅助                                                          */
 /* ------------------------------------------------------------------ */
 
 type TraceMetadata = {
@@ -93,7 +93,7 @@ function hasTraceSubstance(events: StreamEvent[]): boolean {
       return true  // 搜索事件总是有内容
     }
     if (event.type === 'tool_call' || event.type === 'tool_result') {
-      return true  // 工具调用/结果事件总是有内容
+      return true  // Tool调用/Result事件总是有内容
     }
     if (event.type === 'wait_for_input') {
       return true  // ask_user 暂停事件
@@ -137,7 +137,7 @@ function getCallRole(events: StreamEvent[]): string {
   return ''
 }
 
-/** 获取指定类型事件的文本 */
+/** 获取指定Type事件的文本 */
 function getTraceText(events: StreamEvent[], types: LoopEventType[]): string {
   const textEvents = events.filter(
     e => types.includes(e.type) && e.content.trim().length > 0
@@ -152,31 +152,31 @@ function getTraceText(events: StreamEvent[], types: LoopEventType[]): string {
 
 type CallKindIcon = {
   icon: typeof SearchIcon
-  label: string  // 中文标签
+  label: string  // 中文Labels
 }
 
 function describeCallKind(kind: string, role: string, events: StreamEvent[]): CallKindIcon {
   switch (kind) {
     case 'agent_loop_round':
-      if (role === 'retrieve') return { icon: SearchIcon, label: '检索' }
-      if (role === 'observe') return { icon: BookOpenIcon, label: '观察' }
-      if (role === 'narration') return { icon: Sparkles, label: '推理' }
-      return { icon: Sparkles, label: '推理' }
+      if (role === 'retrieve') return { icon: SearchIcon, label: 'Retrieval' }
+      if (role === 'observe') return { icon: BookOpenIcon, label: 'Observation' }
+      if (role === 'narration') return { icon: Sparkles, label: 'Reasoning' }
+      return { icon: Sparkles, label: 'Reasoning' }
     case 'llm_evaluation':
-      return { icon: BrainCircuit, label: '评估' }
+      return { icon: BrainCircuit, label: 'Evaluation' }
     case 'web_search':
-      return { icon: GlobeIcon, label: '联网搜索' }
+      return { icon: GlobeIcon, label: 'Web Search' }
     case 'llm_final_response':
-      return { icon: CheckCircleIcon, label: '回答' }
+      return { icon: CheckCircleIcon, label: 'Answer' }
     case 'tool_call':
       // 按 tool_name 细分图标（rag / web_search / ask_user）
       return describeToolCall(events)
     default:
-      return { icon: Sparkles, label: '推理' }
+      return { icon: Sparkles, label: 'Reasoning' }
   }
 }
 
-/** tool_call 工具行图标（按 tool_name 区分） */
+/** tool_call Tool行图标（按 tool_name 区分） */
 function describeToolCall(events: StreamEvent[]): CallKindIcon {
   let toolName = ''
   for (const e of events) {
@@ -188,17 +188,17 @@ function describeToolCall(events: StreamEvent[]): CallKindIcon {
   }
   switch (toolName) {
     case 'rag':
-      return { icon: BookOpenIcon, label: '检索知识库' }
+      return { icon: BookOpenIcon, label: 'Search Knowledge Base' }
     case 'web_search':
-      return { icon: GlobeIcon, label: '联网搜索' }
+      return { icon: GlobeIcon, label: 'Web Search' }
     case 'ask_user':
-      return { icon: MessageCircleQuestionIcon, label: '向你提问' }
+      return { icon: MessageCircleQuestionIcon, label: 'Ask You' }
     default:
-      return { icon: Sparkles, label: '调用工具' }
+      return { icon: Sparkles, label: 'Call Tool' }
   }
 }
 
-/** 获取chip文本（紧随标签的补充信息） */
+/** 获取chip文本（紧随Labels的补充信息） */
 function getChip(kind: string, role: string, events: StreamEvent[]): string | null {
   const query = events.map(e => getTraceMeta(e).query).find(Boolean) || ''
   switch (kind) {
@@ -210,23 +210,23 @@ function getChip(kind: string, role: string, events: StreamEvent[]): string | nu
       for (const event of events) {
         if (event.type === 'thinking') {
           const meta = getTraceMeta(event)
-          if (meta.quality) return meta.quality === 'sufficient' ? '充分' : '不充分'
+          if (meta.quality) return meta.quality === 'sufficient' ? 'Sufficient' : 'Insufficient'
         }
       }
       return null
     case 'web_search':
-      // 显示搜索结果数
+      // 显示Search Results数
       for (const event of events) {
         if (event.type === 'search') {
           const meta = getTraceMeta(event)
           if (meta.status === 'complete' && meta.results) {
-            return `${meta.results.length} 条结果`
+            return `${meta.results.length} results`
           }
         }
       }
       return query ? clip(query, 40) : null
     case 'tool_call':
-      // 工具行 chip：显示工具参数摘要（rag/web_search 的 query，ask_user 的问题数）
+      // Tool行 chip：显示Tool参数摘要（rag/web_search 的 query，ask_user 的Question数）
       return getToolCallChip(events)
     default:
       return null
@@ -243,14 +243,14 @@ function getToolCallChip(events: StreamEvent[]): string | null {
       if (toolName === 'ask_user') {
         const qs = args.questions
         const n = Array.isArray(qs) ? qs.length : 0
-        return n ? `${n} 个问题` : null
+        return n ? `${n} questions` : null
       }
       const q = typeof args.query === 'string' ? args.query : ''
       if (q) return clip(q, 40)
     }
     if (e.type === 'tool_result') {
       const cnt = meta.sources_count
-      if (typeof cnt === 'number' && cnt > 0) return `${cnt} 条来源`
+      if (typeof cnt === 'number' && cnt > 0) return `${cnt} sources`
     }
   }
   return null
@@ -271,12 +271,12 @@ function detectStreamingMode(events: StreamEvent[], isStreaming: boolean): Strea
     const meta = getTraceMeta(event)
     const kind = String(meta.call_kind || '')
 
-    // ask_user 暂停：等待用户回复
+    // ask_user 暂停：等待用户Reply
     if (event.type === 'wait_for_input') return 'waiting'
     if (kind === 'llm_final_response' && event.type === 'content') return 'responding'
     if (kind === 'llm_evaluation' && event.type === 'thinking') return 'evaluating'
     if (kind === 'web_search') return 'searching'
-    // tool-calling：工具调用进行中
+    // tool-calling：Tool调用进行中
     if (event.type === 'tool_call') return 'tool_calling'
     if (event.type === 'tool_result') return 'tool_calling'
     if (kind === 'agent_loop_round' && event.type === 'observation') return 'exploring'
@@ -287,14 +287,14 @@ function detectStreamingMode(events: StreamEvent[], isStreaming: boolean): Strea
 }
 
 const MODE_LABELS: Record<StreamingMode, string> = {
-  reasoning: 'AI Tutor 正在推理…',
-  exploring: 'AI Tutor 正在检索…',
-  searching: 'AI Tutor 正在搜索…',
-  evaluating: 'AI Tutor 正在评估…',
-  tool_calling: 'AI Tutor 正在调用工具…',
-  waiting: 'AI Tutor 在等你回复…',
-  responding: 'AI Tutor 正在回答…',
-  responded: 'AI Tutor 已回答',
+  reasoning: 'EduMind AI is reasoning...',
+  exploring: 'EduMind AI is retrieving...',
+  searching: 'EduMind AI is searching...',
+  evaluating: 'EduMind AI is evaluating...',
+  tool_calling: 'EduMind AI is calling tools...',
+  waiting: 'EduMind AI is waiting for your reply...',
+  responding: 'EduMind AI is answering...',
+  responded: 'EduMind AI answered',
 }
 
 const MODE_ICONS: Record<StreamingMode, typeof Sparkles> = {
@@ -335,7 +335,7 @@ function TraceRowItem({
   const kind = getCallKind(callEvents)
   const role = getCallRole(callEvents)
 
-  // llm_final_response 组不在trace里显示（它属于回答气泡）
+  // llm_final_response 组不在trace里显示（它属于Answer气泡）
   if (kind === 'llm_final_response') return null
 
   // 无实质内容的组跳过
@@ -343,9 +343,9 @@ function TraceRowItem({
 
   const descriptor = describeCallKind(kind, role, callEvents)
   const chip = getChip(kind, role, callEvents)
-  const isThinking = kind === 'llm_evaluation'  // 评估类行始终展开（thinking是核心内容）
+  const isThinking = kind === 'llm_evaluation'  // Evaluation类行始终展开（thinking是核心内容）
 
-  // 折叠/展开状态：思考类行常开，其余流式自动展开完成后折叠
+  // 折叠/展开Status：Thinking类行常开，其余流式Auto展开完成后折叠
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
   const open = isThinking ? true : (userOpen ?? active)
 
@@ -353,7 +353,7 @@ function TraceRowItem({
   const observationText = getTraceText(callEvents, ['observation'])
   const progressText = getTraceText(callEvents, ['progress'])
 
-  // 搜索结果
+  // Search Results
   const searchResults = useMemo(() => {
     for (const event of callEvents) {
       if (event.type === 'search') {
@@ -378,7 +378,7 @@ function TraceRowItem({
     return ''
   }, [callEvents])
 
-  // 改写查询
+  // 改写Query
   const rewrittenQuery = useMemo(() => {
     for (const event of callEvents) {
       if (event.type === 'query_rewrite') return event.content
@@ -390,7 +390,7 @@ function TraceRowItem({
     return ''
   }, [callEvents])
 
-  // 工具调用/结果信息（tool_call 行用）
+  // Tool调用/Result信息（tool_call 行用）
   const toolInfo = useMemo(() => {
     let callArgs: string = ''
     let resultText: string = ''
@@ -420,7 +420,7 @@ function TraceRowItem({
   }, [callEvents])
 
   const isToolRow = kind === 'tool_call'
-  // narration 轮的 preamble 文本（agent_loop_round + narration，非工具行）
+  // narration 轮的 preamble 文本（agent_loop_round + narration，非Tool行）
   const narrationText = useMemo(() => {
     if (isToolRow) return ''
     return getTraceText(
@@ -460,7 +460,7 @@ function TraceRowItem({
           )}
         />
 
-        {/* 标签 + chip */}
+        {/* Labels + chip */}
         <span className={cn('font-medium', active && 'animate-pulse')}>
           {descriptor.label}
         </span>
@@ -496,28 +496,28 @@ function TraceRowItem({
       {/* 展开内容 */}
       {open && (
         <div className="ml-[26px] mr-2 mt-0.5 max-h-[180px] overflow-y-auto pr-1 text-[11.5px] leading-[1.6] text-muted-foreground">
-          {/* 思考文本 */}
+          {/* Thinking文本 */}
           {thoughtText && (
             <div className="space-y-0.5">
               <div className="text-[10px] font-semibold tracking-[0.04em] text-muted-foreground/70">
-                思考
+                Thinking
               </div>
               <div className="whitespace-pre-wrap break-words">{thoughtText}</div>
             </div>
           )}
 
-          {/* narration preamble（工具调用前的说明文本） */}
+          {/* narration preamble（Tool调用前的说明文本） */}
           {narrationText && !isToolRow && (
             <div className="whitespace-pre-wrap break-words text-muted-foreground/80">
               {clip(narrationText, 200)}
             </div>
           )}
 
-          {/* 工具调用参数 */}
+          {/* Tool调用参数 */}
           {isToolRow && toolInfo.callArgs && (
             <div className="space-y-0.5">
               <div className="text-[10px] font-semibold tracking-[0.04em] text-muted-foreground/70">
-                {toolInfo.toolName === 'ask_user' ? '问题' : '查询'}
+                {toolInfo.toolName === 'ask_user' ? 'Question' : 'Query'}
               </div>
               <div className="whitespace-pre-wrap break-words text-muted-foreground/80">
                 {clip(toolInfo.callArgs, 200)}
@@ -525,11 +525,11 @@ function TraceRowItem({
             </div>
           )}
 
-          {/* 工具结果 */}
+          {/* ToolResult */}
           {isToolRow && toolInfo.resultText && (
             <div className="mt-1 space-y-0.5">
               <div className="text-[10px] font-semibold tracking-[0.04em] text-muted-foreground/70">
-                结果
+                Result
               </div>
               <div className="whitespace-pre-wrap break-words text-muted-foreground/70">
                 {clip(toolInfo.resultText, 400)}
@@ -537,11 +537,11 @@ function TraceRowItem({
             </div>
           )}
 
-          {/* 搜索结果 */}
+          {/* Search Results */}
           {searchResults && searchResults.length > 0 && (
             <div className="mt-1 space-y-0.5">
               <div className="text-[10px] font-semibold tracking-[0.04em] text-muted-foreground/70">
-                搜索结果
+                Search Results
               </div>
               {searchResults.slice(0, 3).map((r, i) => (
                 <div key={i} className="text-muted-foreground/70 truncate">
@@ -551,11 +551,11 @@ function TraceRowItem({
             </div>
           )}
 
-          {/* 观察结果 */}
+          {/* ObservationResult */}
           {observationText && (
             <div className="mt-1 space-y-0.5">
               <div className="text-[10px] font-semibold tracking-[0.04em] text-muted-foreground/70">
-                观察
+                Observation
               </div>
               <div className="whitespace-pre-wrap break-words text-muted-foreground/70">
                 {clip(observationText, 300)}
@@ -563,12 +563,12 @@ function TraceRowItem({
             </div>
           )}
 
-          {/* 改写查询 */}
+          {/* 改写Query */}
           {rewrittenQuery && (
             <div className="mt-0.5 flex items-start gap-1 text-amber-600 dark:text-amber-400">
               <PencilIcon className="h-2.5 w-2.5 shrink-0 mt-0.5" />
               <span className="whitespace-pre-wrap break-words font-medium">
-                改写: {rewrittenQuery}
+                Rewrite: {rewrittenQuery}
               </span>
             </div>
           )}
@@ -578,7 +578,7 @@ function TraceRowItem({
             <div className="opacity-70">{progressText}</div>
           )}
 
-          {/* 错误 */}
+          {/* Incorrect */}
           {callEvents.some(e => e.type === 'error') && (
             <div className="mt-1 space-y-0.5">
               {callEvents.filter(e => e.type === 'error' && e.content.trim()).map((e, i) => (
@@ -635,7 +635,7 @@ function CallTracePanel({
 }
 
 /* ------------------------------------------------------------------ */
-/*  StreamingStatus — 状态行                                            */
+/*  StreamingStatus — Status行                                            */
 /* ------------------------------------------------------------------ */
 
 function StreamingStatus({
@@ -727,7 +727,7 @@ function StreamingStatus({
 }
 
 /* ------------------------------------------------------------------ */
-/*  AssistantActivity — 状态行 + trace折叠/展开                         */
+/*  AssistantActivity — Status行 + trace折叠/展开                         */
 /* ------------------------------------------------------------------ */
 
 export function AssistantActivity({
@@ -741,7 +741,7 @@ export function AssistantActivity({
 }) {
   const hasFinalContent = Boolean(content && content.trim().length > 0)
 
-  // 判断是否进入了最终回答阶段
+  // 判断是否进入了最终Answer阶段
   const finalPhase = useMemo(() => {
     if (!isStreaming) return true
     // 检测是否有finish标记或llm_final_response事件
@@ -763,7 +763,7 @@ export function AssistantActivity({
     })
   }, [events])
 
-  // null = 自动跟随phase（流式展开，完成后折叠）；boolean = 用户手动pin
+  // null = Auto跟随phase（流式展开，完成后折叠）；boolean = 用户手动pin
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
   const open = hasTrace && (userOpen ?? !finalPhase)
 
@@ -861,7 +861,7 @@ export function loopTraceToEvents(trace: LoopTrace): StreamEvent[] {
       events.push({
         type: 'search',
         round: step.round,
-        content: `找到 ${step.webSearchResults?.length || 0} 条网络结果`,
+        content: `Found ${step.webSearchResults?.length || 0} web results`,
         metadata: {
           call_id: `search_round_${step.round}`, call_kind: 'web_search',
           query: step.webSearchQuery, status: 'complete',
@@ -874,7 +874,7 @@ export function loopTraceToEvents(trace: LoopTrace): StreamEvent[] {
     events.push({
       type: 'progress',
       round: step.round,
-      content: isSufficient ? '上下文充分，准备生成回答' : '上下文不充分，需要改写查询',
+      content: isSufficient ? 'Context is sufficient. Preparing the answer.' : 'Context is insufficient. Need to rewrite the query.',
       metadata: {
         call_id: roundCallId, call_kind: 'agent_loop_round',
         call_role: isSufficient ? 'finish' : 'narration',

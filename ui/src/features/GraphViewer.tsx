@@ -130,7 +130,7 @@ const GraphViewer = () => {
   const enableEdgeEvents = useSettingsStore.use.enableEdgeEvents()
   const graphEdgeCount = useGraphStore.use.graphEdgeCount()
 
-  // 图谱数据加载入口：fetch → build sigmaGraph → 触发 GraphControl 跑 FA2 布局。
+  // 图谱数据加载入口：fetch → build sigmaGraph → 触发 GraphControl 跑 FA2 Layout。
   // webui 原在 PropertiesView 内调用此 hook；本仓 PropertiesView 改为直接读 store，
   // 故必须在此显式调用，否则 sigmaGraph 恒为 null、画布空白（搜索框/控制条仍显示）。
   useLightragGraph()
@@ -233,8 +233,8 @@ const GraphViewer = () => {
             <div className="border-primary mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"></div>
             <p>
               {isFetching
-                ? '正在加载图谱数据...'
-                : '正在计算布局...'}
+                ? 'Loading graph data...'
+                : 'Computing layout...'}
             </p>
           </div>
         </div>

@@ -81,7 +81,7 @@ function DocumentStatusPopover({ doc }: { doc: DocStatusResponse }) {
         <button
           type="button"
           className="ml-1 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
-          aria-label="查看详情"
+          aria-label="View details"
         >
           <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
         </button>
@@ -111,7 +111,7 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({ all: 0 })
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // 固定显示文件名（精简后移除文件名/ID 切换 UI）；初始按更新时间倒序
+  // 固定显示File Name（精简后移除File Name/ID 切换 UI）；初始按更新时间倒序
   const showFileName = true
   const [sortField, setSortField] = useState<SortField>('updated_at')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
@@ -147,7 +147,7 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
       setPagination(res.pagination)
       setStatusCounts(res.status_counts)
     } catch (err) {
-      toast.error(`加载文档失败：${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Failed to load documents: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       if (mountedRef.current) setIsRefreshing(false)
     }
@@ -174,7 +174,7 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
   }, [pipelineActive, fetchDocuments])
 
   const handleSort = (field: SortField) => {
-    // 精简后仅文件名列可点排序；showFileName 固定 true，按 file_path 排序
+    // 精简后仅File Name列可点排序；showFileName 固定 true，按 file_path 排序
     let actual = field
     if (field === 'id') actual = showFileName ? 'file_path' : 'id'
     const newDir: SortDirection =
@@ -211,7 +211,7 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
         fetchDocuments()
       }
     } catch (err) {
-      toast.error(`扫描文档失败：${err instanceof Error ? err.message : String(err)}`)
+      toast.error(`Failed to scan documents: ${err instanceof Error ? err.message : String(err)}`)
     }
   }, [fetchDocuments])
 
@@ -277,7 +277,7 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
         } catch (err) {
           masteryResetFailed = true
           console.warn(
-            `清空知识点状态失败：${err instanceof Error ? err.message : String(err)}`
+            `ClearKnowledge PointsStatusFailed：${err instanceof Error ? err.message : String(err)}`
           )
         }
       }
@@ -299,7 +299,7 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
   const processCount = statusCounts.processing ?? 0
   const failedCount = statusCounts.failed ?? 0
 
-  // 状态过滤按钮（对齐 DeepT 导航项风格：rounded-lg + hover/active 背景过渡）
+  // Status过滤按钮（对齐 DeepT 导航项风格：rounded-lg + hover/active 背景过渡）
   const filterBtn = useMemo(
     () =>
       (filter: StatusFilter, label: string, count: number, colorClass: string) => (
@@ -333,14 +333,14 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
     </button>
   )
 
-  // 工具栏图标按钮统一样式（对齐 DeepT 折叠态导航图标按钮：
+  // Tool栏图标按钮统一样式（对齐 DeepT 折叠态导航图标按钮：
   // h-9 w-9 rounded-xl，hover:bg-background/60，transition-all duration-150，无 active:scale）
   const iconBtnClass =
     'flex h-9 w-9 items-center justify-center rounded-xl text-foreground/85 transition-all duration-150 hover:bg-background/60 hover:text-foreground disabled:opacity-50'
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* 顶部工具栏 + 状态过滤行 */}
+      {/* 顶部Tool栏 + Status过滤行 */}
       <div className="flex-none px-3 pb-2 pt-3">
         <div className="flex items-center gap-1">
           <UploadDocumentsDialog
@@ -356,8 +356,8 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
             type="button"
             onClick={fetchDocuments}
             disabled={isRefreshing}
-            aria-label="刷新文档列表"
-            title="刷新文档列表"
+            aria-label="Refresh documents"
+            title="Refresh documents"
             className={iconBtnClass}
           >
             <RotateCcwIcon className="h-[18px] w-[18px]" strokeWidth={1.6} />
@@ -379,11 +379,11 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
             >
               {selectedDocIds.length === docs.length ? (
                 <>
-                  <XIcon className="h-4 w-4" strokeWidth={1.6} /> 取消({docs.length})
+                  <XIcon className="h-4 w-4" strokeWidth={1.6} /> Cancel ({docs.length})
                 </>
               ) : (
                 <>
-                  <CheckSquareIcon className="h-4 w-4" strokeWidth={1.6} /> 全选({docs.length})
+                  <CheckSquareIcon className="h-4 w-4" strokeWidth={1.6} /> Select all ({docs.length})
                 </>
               )}
             </button>
@@ -393,24 +393,24 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
             <PopoverTrigger asChild>
               <button
                 type="button"
-                aria-label="更多操作"
-                title="更多操作"
+                aria-label="More actions"
+                title="More actions"
                 className={iconBtnClass}
               >
                 <MoreHorizontalIcon className="h-[18px] w-[18px]" strokeWidth={1.6} />
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-40 p-1">
-              {moreMenuItem(handleScan, <RefreshCwIcon className="h-4 w-4" strokeWidth={1.6} />, '扫描/重试')}
+              {moreMenuItem(handleScan, <RefreshCwIcon className="h-4 w-4" strokeWidth={1.6} />, 'Scan / Retry')}
               {moreMenuItem(
                 () => setShowPipelineStatus(true),
                 <ActivityIcon className="h-4 w-4" strokeWidth={1.6} />,
-                '流水线状态'
+                'Pipeline Status'
               )}
               {moreMenuItem(
                 () => setShowClearDialog(true),
                 <Trash2Icon className="h-4 w-4" strokeWidth={1.6} />,
-                '清空文档'
+                'Clear Documents'
               )}
             </PopoverContent>
           </Popover>
@@ -418,8 +418,8 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
             <button
               type="button"
               onClick={onCollapse}
-              aria-label="收起侧边栏"
-              title="收起侧边栏"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
               className={iconBtnClass}
             >
               <ChevronLeftIcon className="h-[18px] w-[18px]" strokeWidth={1.6} />
@@ -427,43 +427,43 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
           )}
         </div>
 
-        {/* 状态过滤行 */}
+        {/* Status过滤行 */}
         <div className="mt-2 flex flex-wrap gap-1">
-          {filterBtn('all', '全部', statusCounts.all ?? 0, '')}
-          {filterBtn('completed', '已完成', completedCount, 'text-green-600')}
-          {filterBtn('parse', '解析', parseCount, 'text-cyan-600')}
-          {filterBtn('analyze', '分析', analyzeCount, 'text-indigo-600')}
-          {filterBtn('process', '处理', processCount, 'text-blue-600')}
-          {filterBtn('failed', '失败', failedCount, 'text-red-600')}
+          {filterBtn('all', 'All', statusCounts.all ?? 0, '')}
+          {filterBtn('completed', 'Completed', completedCount, 'text-green-600')}
+          {filterBtn('parse', 'Parsing', parseCount, 'text-cyan-600')}
+          {filterBtn('analyze', 'Analyzing', analyzeCount, 'text-indigo-600')}
+          {filterBtn('process', 'Processing', processCount, 'text-blue-600')}
+          {filterBtn('failed', 'Failed', failedCount, 'text-red-600')}
         </div>
       </div>
 
       {/* 文档列表：表头 + 行列表 */}
       <div className="relative flex min-h-0 flex-1 flex-col">
         {!hasAny ? (
-          <EmptyCard title="无文档" description="还没有上传任何文档" className="m-2 rounded-lg" />
+          <EmptyCard title="No Documents" description="No documents uploaded yet" className="m-2 rounded-lg" />
         ) : (
           <TooltipProvider>
             {/* 表头 + 行列表共享同一 padding/gap/列宽，确保对齐 */}
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 pt-1">
-              {/* 表头：三列（文件名 flex-1 / 状态+详情 w-20 / 勾选 w-6），与行完全同结构 */}
+              {/* 表头：三列（File Name flex-1 / Status+详情 w-20 / 勾Select w-6），与行完全同结构 */}
               <div className="flex items-center gap-2 px-2.5 pb-1 text-[11px] font-medium uppercase tracking-widest text-muted-foreground/60">
                 <button
                   type="button"
                   onClick={() => handleSort('id')}
                   disabled={isRefreshing}
                   className="flex min-w-0 flex-1 items-center gap-1 cursor-pointer select-none transition-colors hover:text-foreground disabled:opacity-50"
-                  title="切换文件名排序"
+                  title="Toggle file name sorting"
                 >
-                  <span>文件名</span>
+                  <span>File Name</span>
                   {sortField === 'file_path' && (
                     sortDirection === 'asc'
                       ? <ArrowUpIcon className="h-3 w-3" strokeWidth={2} />
                       : <ArrowDownIcon className="h-3 w-3" strokeWidth={2} />
                   )}
                 </button>
-                <div className="w-20 shrink-0">状态</div>
-                <div className="w-6 shrink-0 text-center">选</div>
+                <div className="w-20 shrink-0">Status</div>
+                <div className="w-6 shrink-0 text-center">Select</div>
               </div>
               {/* 行列表 */}
               {docs.map((doc) => {
@@ -491,7 +491,7 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
                         </TooltipContent>
                       </Tooltip>
                     </div>
-                    {/* 状态 + 详情按钮合并为一个 flex 子项，与表头 w-20 列对齐 */}
+                    {/* Status + 详情按钮合并为一个 flex 子项，与表头 w-20 列对齐 */}
                     <div className="w-20 shrink-0 flex items-center gap-1">
                       <span className={cn('truncate text-xs', STATUS_COLORS[status])}>
                         {STATUS_LABELS[status]}

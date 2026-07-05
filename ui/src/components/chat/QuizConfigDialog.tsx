@@ -43,12 +43,12 @@ export default function QuizConfigDialog({
       >
         <div className="flex items-center gap-2 border-b border-border/30 px-5 py-3.5">
           <BrainIcon className="h-5 w-5 text-emerald-500" />
-          <h2 className="text-base font-semibold text-foreground">出题配置</h2>
+          <h2 className="text-base font-semibold text-foreground">Quiz Settings</h2>
           <button
             type="button"
             onClick={onCancel}
             className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-            aria-label="关闭"
+            aria-label="Close"
           >
             <XIcon className="h-4 w-4" />
           </button>
@@ -57,13 +57,13 @@ export default function QuizConfigDialog({
         <div className="space-y-4 px-5 py-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">
-              主题 <span className="text-muted-foreground/50">（必填）</span>
+              Topic <span className="text-muted-foreground/50">(required)</span>
             </label>
             <input
               type="text"
               value={topic}
               onChange={(event) => setTopic(event.target.value)}
-              placeholder="例如：Python 基础语法、数据结构入门..."
+              placeholder="Example: Python basics, introductory data structures..."
               className="w-full rounded-xl border border-border/50 bg-transparent px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-emerald-500/50"
               autoFocus
             />
@@ -71,7 +71,7 @@ export default function QuizConfigDialog({
 
           <div className="grid grid-cols-[120px_1fr] gap-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">题目数量</label>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">Number of Questions</label>
               <input
                 type="number"
                 min={1}
@@ -84,7 +84,7 @@ export default function QuizConfigDialog({
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">难度</label>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">Difficulty</label>
               <div className="grid grid-cols-4 gap-1 rounded-lg border border-border/25 p-0.5">
                 {QUIZ_DIFFICULTY_OPTIONS.map((option) => (
                   <button
@@ -107,7 +107,7 @@ export default function QuizConfigDialog({
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">
-              题型 <span className="text-muted-foreground/50">（不选为任意题型）</span>
+              Question Types <span className="text-muted-foreground/50">(leave empty for any type)</span>
             </label>
             <div className="flex flex-wrap gap-1.5">
               {QUIZ_QUESTION_TYPE_OPTIONS.map((option) => (
@@ -135,7 +135,7 @@ export default function QuizConfigDialog({
             onClick={onCancel}
             className="inline-flex h-9 items-center rounded-xl px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60"
           >
-            取消
+            Cancel
           </button>
           <button
             type="button"
@@ -157,7 +157,7 @@ export default function QuizConfigDialog({
             )}
           >
             <BrainIcon className="mr-1.5 h-4 w-4" />
-            开始出题
+            Start Quiz
           </button>
         </div>
       </div>

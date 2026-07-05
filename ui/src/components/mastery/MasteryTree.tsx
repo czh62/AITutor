@@ -19,7 +19,7 @@ interface MasteryTreeProps {
 
 const TYPE_LABELS: Record<MasteryKnowledgePoint['knowledge_type'], string> = {
   memory: '记忆',
-  concept: '概念',
+  concept: 'Concept',
   procedure: '程序',
   design: '设计'
 }
@@ -82,7 +82,7 @@ export default function MasteryTree({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-foreground">{module.title}</span>
                 <span className="block truncate text-[11px] text-muted-foreground">
-                  {mastered}/{total} 掌握
+                  {mastered}/{total} Mastered
                 </span>
               </span>
             </button>

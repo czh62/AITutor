@@ -16,8 +16,8 @@ const items: Array<{
   label: string
   icon: typeof FileTextIcon
 }> = [
-  { mode: 'documents', label: '文档管理', icon: FileTextIcon },
-  { mode: 'mastery', label: '知识点', icon: BrainCircuitIcon }
+  { mode: 'documents', label: 'Documents', icon: FileTextIcon },
+  { mode: 'mastery', label: 'Knowledge Points', icon: BrainCircuitIcon }
 ]
 
 export default function ActivityBar({
@@ -57,7 +57,7 @@ export default function ActivityBar({
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right">
-                {active ? `收起${item.label}` : item.label}
+                {active ? `Collapse ${item.label}` : item.label}
               </TooltipContent>
             </Tooltip>
           )

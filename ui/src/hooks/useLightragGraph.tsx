@@ -157,7 +157,7 @@ const fetchGraph = async (label: string, maxDepth: number, maxNodes: number) => 
     // Record the error, then RETHROW so the caller's .catch() runs its
     // bounded-retry path. Returning null here would resolve the promise
     // "successfully" and treat a transient failure as an empty graph.
-    toast.error(`查询图谱失败：${errorMessage(e)}`)
+    toast.error(`Failed to query graph: ${errorMessage(e)}`)
     throw e
   }
 
@@ -421,7 +421,7 @@ const useLightrangeGraph = () => {
           const data = result?.rawGraph
 
           if (result?.is_truncated) {
-            toast.info('图谱数据已按最大节点数截断')
+            toast.info('Graph data was truncated to the maximum node count.')
           }
 
           // Reset state
@@ -433,7 +433,7 @@ const useLightrangeGraph = () => {
             const emptyGraph = new UndirectedGraph()
 
             emptyGraph.addNode('empty-graph-node', {
-              label: '图谱为空',
+              label: 'Graph is empty',
               color: '#5D6D7E',
               x: 0.5,
               y: 0.5,
@@ -514,7 +514,7 @@ const useLightrangeGraph = () => {
             )
             lastFetchSignatureRef.current = fetchSignature
             retryStateRef.current = { signature: '', attempts: 0 }
-            toast.error('图谱数据渲染失败，请使用刷新重试')
+            toast.error('Failed to render graph data. Refresh and try again.')
             return
           }
 
@@ -545,7 +545,7 @@ const useLightrangeGraph = () => {
               fetchSignature
             )
             lastFetchSignatureRef.current = fetchSignature
-            toast.error('图谱数据加载失败，请使用刷新重试')
+            toast.error('Failed to load graph data. Refresh and try again.')
           }
         })
     }

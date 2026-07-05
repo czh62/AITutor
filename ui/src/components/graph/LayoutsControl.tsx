@@ -25,12 +25,12 @@ type LayoutName =
   | 'Force Atlas'
 
 const LAYOUT_LABELS: Record<LayoutName, string> = {
-  Circular: '环形布局',
-  Circlepack: '圆形打包布局',
-  Random: '随机布局',
-  Noverlaps: '去重叠布局',
-  'Force Directed': '力导向布局',
-  'Force Atlas': 'Force Atlas 布局'
+  Circular: 'Circular Layout',
+  Circlepack: 'Circle Pack Layout',
+  Random: 'Random Layout',
+  Noverlaps: 'No-overlap Layout',
+  'Force Directed': 'Force Directed Layout',
+  'Force Atlas': 'Force Atlas Layout'
 }
 
 type WorkerLayoutName = 'Noverlaps' | 'Force Directed' | 'Force Atlas'
@@ -167,7 +167,7 @@ const WorkerLayoutControl = ({ layoutName }: { layoutName: WorkerLayoutName }) =
     <Button
       size="icon"
       onClick={() => (running ? stop(false) : start())}
-      tooltip={running ? '停止布局动画' : '开始布局动画'}
+      tooltip={running ? 'Stop layout animation' : 'Start layout animation'}
       variant={controlButtonVariant}
     >
       {running ? <PauseIcon /> : <PlayIcon />}
@@ -272,7 +272,7 @@ const LayoutsControl = () => {
               size="icon"
               variant={controlButtonVariant}
               onClick={() => setOpened((e: boolean) => !e)}
-              tooltip="布局"
+              tooltip="Layout"
             >
               <GripIcon />
             </Button>

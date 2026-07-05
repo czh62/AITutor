@@ -2,7 +2,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useGraphStore } from '@/stores/graph'
 
 /**
- * 左下角状态栏：显示当前深度、节点数、边数。
+ * 左下角Status栏：显示当前深度、Nodes数、Edges数。
  */
 const SettingsDisplay = () => {
   const graphQueryMaxDepth = useSettingsStore.use.graphQueryMaxDepth()
@@ -11,9 +11,9 @@ const SettingsDisplay = () => {
 
   return (
     <div className="absolute bottom-4 left-[calc(1rem+2.5rem)] flex items-center gap-2 text-xs text-gray-400">
-      <div>深度: {graphQueryMaxDepth}</div>
-      <div>节点: {graphNodeCount}</div>
-      <div>边: {graphEdgeCount}</div>
+      <div>Depth: {graphQueryMaxDepth}</div>
+      <div>Nodes: {graphNodeCount}</div>
+      <div>Edges: {graphEdgeCount}</div>
     </div>
   )
 }
