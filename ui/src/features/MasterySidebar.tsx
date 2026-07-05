@@ -38,6 +38,8 @@ interface MasterySidebarProps {
   onCollapse?: () => void
 }
 
+const MASTERY_DOCUMENTS_CLEARED_EVENT = 'aitutor:mastery-documents-cleared'
+
 const BUILD_STATUS_LABELS: Record<MasteryBuildStatus, string> = {
   not_started: '处理中',
   queued: '处理中',
@@ -232,6 +234,20 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
   }, [loadDocuments])
 
   useEffect(() => {
+    const handleMasteryDocumentsCleared = () => {
+      setDocuments([])
+      setSelectedDocId(null)
+      setDetail(null)
+      setSelectedPoint(null)
+      setSelectedModule(null)
+    }
+    window.addEventListener(MASTERY_DOCUMENTS_CLEARED_EVENT, handleMasteryDocumentsCleared)
+    return () => {
+      window.removeEventListener(MASTERY_DOCUMENTS_CLEARED_EVENT, handleMasteryDocumentsCleared)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!needsPolling) return
     const timer = setInterval(loadDocuments, 10000)
     return () => clearInterval(timer)
@@ -390,7 +406,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
         <div className="max-h-56 shrink-0 overflow-y-auto border-b border-border/60 p-2">
           {documents.length === 0 ? (
             <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-              上传 TXT、MD、PDF 或 DOCX 后会在这里生成知识树
+              暂无知识点，请先上传并完成文档解析。
             </div>
           ) : (
             <div className="space-y-2">

@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
+  clearMasteryDocuments,
   getDocumentsPaginated,
   scanNewDocuments,
   checkHealth
@@ -52,6 +53,7 @@ type SortDirection = 'asc' | 'desc'
 
 const DEFAULT_PAGE_SIZE = 10
 const PROCESSING_LIKE_STATUSES: DocStatus[] = ['processing', 'pending', 'parsing', 'analyzing']
+const MASTERY_DOCUMENTS_CLEARED_EVENT = 'aitutor:mastery-documents-cleared'
 
 const getDisplayFileName = (doc: DocStatusResponse, maxLength = 24): string => {
   if (!doc.file_path || doc.file_path.trim() === '') return doc.id
@@ -259,6 +261,7 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
         processingCountFromCounts > 0
           ? processingCountFromCounts
           : res.documents.filter((doc) => PROCESSING_LIKE_STATUSES.includes(doc.status)).length
+      let masteryResetFailed = false
 
       if (mountedRef.current) {
         setDocs(res.documents)
@@ -267,10 +270,23 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
         setStatusCounts(nextStatusCounts)
       }
 
+      if (remainingCount === 0) {
+        try {
+          await clearMasteryDocuments()
+          window.dispatchEvent(new Event(MASTERY_DOCUMENTS_CLEARED_EVENT))
+        } catch (err) {
+          masteryResetFailed = true
+          console.warn(
+            `清空知识点状态失败：${err instanceof Error ? err.message : String(err)}`
+          )
+        }
+      }
+
       return {
         remainingCount,
         processingCount,
-        statusCounts: nextStatusCounts
+        statusCounts: nextStatusCounts,
+        masteryResetFailed
       }
     } finally {
       if (mountedRef.current) setIsRefreshing(false)
