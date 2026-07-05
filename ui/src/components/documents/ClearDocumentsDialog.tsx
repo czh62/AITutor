@@ -12,11 +12,17 @@ import { clearDocuments, clearCache } from '@/api/aitutor'
 import { toast } from 'sonner'
 import { errorMessage } from '@/lib/utils'
 
+interface ClearDocumentsVerification {
+  remainingCount: number
+  processingCount: number
+  statusCounts: Record<string, number>
+}
+
 interface ClearDocumentsDialogProps {
   /** 受控打开：传入则由外部控制开关（用于「更多」菜单触发）；不传则自管理。 */
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  onDocumentsCleared?: () => Promise<void>
+  onDocumentsCleared?: () => Promise<ClearDocumentsVerification>
 }
 
 export default function ClearDocumentsDialog({
@@ -43,21 +49,33 @@ export default function ClearDocumentsDialog({
     setBusy(true)
     try {
       // 清空文档（DELETE /documents）
-      await clearDocuments()
-      toast.success('文档清空成功')
+      const clearResult = await clearDocuments()
+      if (clearResult.status !== 'success') {
+        throw new Error(clearResult.message || '清空文档失败')
+      }
       // 清空 LLM 缓存（独立接口 POST /documents/clear_cache）
       if (clearCacheOption) {
         try {
           await clearCache()
           toast.success('缓存清空成功')
         } catch (cacheErr) {
-          toast.error(`清空缓存失败：${errorMessage(cacheErr)}`)
+          const message = errorMessage(cacheErr)
+          console.warn(`清空缓存失败：${message}`)
         }
+      }
+      const verification = await onDocumentsCleared?.()
+      const remainingCount = verification?.remainingCount ?? 0
+      const processingCount = verification?.processingCount ?? 0
+      if (remainingCount === 0) {
+        toast.success('文档清空成功')
+      } else if (processingCount > 0) {
+        toast.warning('部分文档仍在处理中，暂时无法清除。')
+      } else {
+        toast.warning('清除请求已发送，但仍有文档残留，请稍后刷新确认。')
       }
       setOpen(false)
       setConfirm('')
       setClearCacheOption(false)
-      await onDocumentsCleared?.()
     } catch (err) {
       toast.error(`清空文档失败：${errorMessage(err)}`)
     } finally {

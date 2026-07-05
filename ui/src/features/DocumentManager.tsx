@@ -51,6 +51,7 @@ type SortField = 'created_at' | 'updated_at' | 'id' | 'file_path'
 type SortDirection = 'asc' | 'desc'
 
 const DEFAULT_PAGE_SIZE = 10
+const PROCESSING_LIKE_STATUSES: DocStatus[] = ['processing', 'pending', 'parsing', 'analyzing']
 
 const getDisplayFileName = (doc: DocStatusResponse, maxLength = 24): string => {
   if (!doc.file_path || doc.file_path.trim() === '') return doc.id
@@ -233,9 +234,48 @@ export default function DocumentManager({ onCollapse }: { onCollapse?: () => voi
 
   const handleDocumentsCleared = useCallback(async () => {
     setSelectedDocIds([])
-    setStatusCounts({})
-    await fetchDocuments()
-  }, [fetchDocuments])
+    setStatusFilter('all')
+    setIsRefreshing(true)
+    try {
+      const res = await getDocumentsPaginated({
+        statusFilter: 'all',
+        page: 1,
+        page_size: pagination.page_size,
+        sort_field: sortField,
+        sort_direction: sortDirection
+      })
+      const nextStatusCounts = res.status_counts ?? {}
+      const remainingCount =
+        typeof nextStatusCounts.all === 'number'
+          ? nextStatusCounts.all
+          : typeof res.pagination.total_count === 'number'
+            ? res.pagination.total_count
+            : res.documents.length
+      const processingCountFromCounts = PROCESSING_LIKE_STATUSES.reduce(
+        (sum, status) => sum + (nextStatusCounts[status] ?? 0),
+        0
+      )
+      const processingCount =
+        processingCountFromCounts > 0
+          ? processingCountFromCounts
+          : res.documents.filter((doc) => PROCESSING_LIKE_STATUSES.includes(doc.status)).length
+
+      if (mountedRef.current) {
+        setDocs(res.documents)
+        setHasAny(remainingCount > 0)
+        setPagination(res.pagination)
+        setStatusCounts(nextStatusCounts)
+      }
+
+      return {
+        remainingCount,
+        processingCount,
+        statusCounts: nextStatusCounts
+      }
+    } finally {
+      if (mountedRef.current) setIsRefreshing(false)
+    }
+  }, [pagination.page_size, sortField, sortDirection])
 
   const completedCount = statusCounts.processed ?? 0
   const parseCount = (statusCounts.parsing ?? 0) + (statusCounts.pending ?? 0) + (statusCounts.preprocessed ?? 0)
