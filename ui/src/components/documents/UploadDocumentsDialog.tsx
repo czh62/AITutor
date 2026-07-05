@@ -28,6 +28,7 @@ const DOCUMENT_UPLOAD_ACCEPT = {
 }
 const DOCUMENT_UPLOAD_EXTENSIONS = ['.txt', '.md', '.pdf', '.docx']
 const DOCUMENT_TYPE_ERROR = '仅支持 TXT、MD、PDF、DOCX 文件'
+const ACCEPTED_UPLOAD_STATUSES = new Set(['success', 'partial_success'])
 
 export default function UploadDocumentsDialog({
   onDocumentsUploaded,
@@ -57,7 +58,8 @@ export default function UploadDocumentsDialog({
         return next
       })
       const toastId = toast.loading('正在上传文件...')
-      let hasSuccess = false
+      let hasAcceptedUpload = false
+      let hasFailure = false
       let batchTriggered = false
 
       // 按文件名排序后顺序上传
@@ -71,31 +73,36 @@ export default function UploadDocumentsDialog({
           const result = await uploadDocument(file, (pct) =>
             setProgresses((p) => ({ ...p, [file.name]: pct }))
           )
-          if (result.status !== 'success') {
+          if (!ACCEPTED_UPLOAD_STATUSES.has(result.status)) {
+            hasFailure = true
             setFileErrors((p) => ({ ...p, [file.name]: result.message }))
           } else {
-            hasSuccess = true
+            hasAcceptedUpload = true
             if (!batchTriggered) {
               batchTriggered = true
               onUploadBatchAccepted?.()
             }
           }
         } catch (err) {
+          hasFailure = true
           setFileErrors((p) => ({ ...p, [file.name]: errorMessage(err) }))
         }
       }
 
-      if (Object.keys(fileErrors).length > 0 && !hasSuccess) {
+      if (hasFailure) {
         toast.error('部分文件上传失败', { id: toastId })
       } else {
-        toast.success('文件上传完成', { id: toastId })
-      }
-      if (hasSuccess) {
-        await onDocumentsUploaded?.().catch(() => undefined)
+        toast.success('上传成功，正在后台处理', { id: toastId, duration: 2000 })
       }
       setIsUploading(false)
+      if (hasAcceptedUpload && !hasFailure) {
+        setProgresses({})
+        setFileErrors({})
+        setOpen(false)
+        void onDocumentsUploaded?.().catch(() => undefined)
+      }
     },
-    [onDocumentsUploaded, onUploadBatchAccepted, fileErrors]
+    [onDocumentsUploaded, onUploadBatchAccepted]
   )
 
   return (
