@@ -103,7 +103,7 @@ export default function QAPanel() {
           pushEvent({
             type: 'wait_for_input',
             round: 0,
-            content: payload.context || '需要更多信息',
+            content: payload.context || 'More information is needed.',
             metadata: { ask_user: payload }
           })
           updateMessage(assistantId, {
@@ -213,12 +213,12 @@ export default function QAPanel() {
       addMessage({
         id: genId(),
         role: 'user',
-        content: `为「${config.topic}」出 ${config.num_questions} 题`
+        content: `Generate ${config.num_questions} questions for "${config.topic}"`
       })
       addMessage({
         id: assistantId,
         role: 'assistant',
-        content: `正在为「${config.topic}」生成题目...`,
+        content: `Generating questions for "${config.topic}"...`,
         isStreaming: true,
         traceEvents: [],
         quizQuestions: []
@@ -244,7 +244,7 @@ export default function QAPanel() {
             },
             onResult: (resultQuestions) => {
               updateMessage(assistantId, {
-                content: resultQuestions.length ? '出题完成' : '未生成题目',
+                content: resultQuestions.length ? 'Quiz ready' : 'No questions generated',
                 isStreaming: false,
                 quizQuestions: resultQuestions
               })
@@ -326,10 +326,10 @@ export default function QAPanel() {
             <div className="flex flex-col items-center gap-3 text-center">
               <GraduationCapIcon className="h-10 w-10 text-emerald-500" />
               <h1 className="font-serif text-[36px] font-medium leading-tight text-foreground">
-                知识问答
+                Knowledge Q&A
               </h1>
               <p className="max-w-md text-sm text-muted-foreground">
-                基于已上传文档检索、追问和出题，支持过程追踪与引用查看
+                Ask questions from uploaded documents, follow up, and generate quizzes with trace and source views.
               </p>
             </div>
           </div>

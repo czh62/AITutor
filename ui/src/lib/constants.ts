@@ -4,8 +4,8 @@ import type { buttonVariants } from '@/components/ui/Button'
 export const backendBaseUrl = ''
 
 export const SiteInfo = {
-  name: 'AI Tutor',
-  description: '文档知识问答与知识图谱'
+  name: 'EduMind AI',
+  description: 'Document Q&A and Knowledge Graph'
 }
 
 export const defaultQueryLabel = '*'

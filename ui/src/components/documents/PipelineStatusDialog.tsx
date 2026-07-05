@@ -28,7 +28,7 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
   const historyRef = useRef<HTMLDivElement>(null)
   const { pos, reset, dragHandleProps } = useDraggable()
 
-  // 弹窗关闭时复位 UI 状态（拖动位置、取消确认）
+  // 弹窗Close时复位 UI Status（拖动位置、Cancel确认）
   useEffect(() => {
     if (!open) {
       setShowCancelConfirm(false)
@@ -36,7 +36,7 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
     }
   }, [open, reset])
 
-  // 历史日志自动滚动到底部（用户手动上滚后停止跟随）
+  // 历史日志Auto滚动到底部（用户手动上滚后停止跟随）
   useEffect(() => {
     const container = historyRef.current
     if (!container || isUserScrolled) return
@@ -51,7 +51,7 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
     setIsUserScrolled(!isAtBottom)
   }
 
-  // 打开时每 2s 刷新流水线状态
+  // 打开时每 2s 刷新Pipeline Status
   useEffect(() => {
     if (!open) return
     const fetchStatus = async () => {
@@ -59,7 +59,7 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
         const data = await getPipelineStatus()
         setStatus(data)
       } catch (err) {
-        toast.error(`获取流水线状态失败：${errorMessage(err)}`)
+        toast.error(`Failed to get pipeline status: ${errorMessage(err)}`)
       }
     }
     fetchStatus()
@@ -72,12 +72,12 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
     try {
       const result = await cancelPipeline()
       if (result.status === 'cancellation_requested') {
-        toast.success('已请求取消流水线')
+        toast.success('Cancel pipeline requested')
       } else if (result.status === 'not_busy') {
-        toast.info('流水线当前空闲，无需取消')
+        toast.info('Pipeline is idle. Nothing to cancel.')
       }
     } catch (err) {
-      toast.error(`取消流水线失败：${errorMessage(err)}`)
+      toast.error(`Failed to cancel pipeline: ${errorMessage(err)}`)
     }
   }
 
@@ -102,23 +102,23 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
       >
         <DialogDescription className="sr-only">
           {status?.job_name
-            ? `任务名: ${status.job_name}, 进度: ${status.cur_batch}/${status.batchs}`
-            : '当前无活动任务'}
+            ? `Task名: ${status.job_name}, 进度: ${status.cur_batch}/${status.batchs}`
+            : '当前无活动Task'}
         </DialogDescription>
 
         {/* 拖动手柄 + 标题 */}
         <DialogHeader className="flex flex-row items-center" {...dragHandleProps}>
           <GripHorizontalIcon className="mr-2 h-5 w-5 shrink-0 text-muted-foreground" />
-          <DialogTitle className="flex-1 select-none">流水线状态</DialogTitle>
+          <DialogTitle className="flex-1 select-none">Pipeline Status</DialogTitle>
         </DialogHeader>
 
-        {/* 状态内容 */}
+        {/* Status内容 */}
         <div className="space-y-4 pt-4">
-          {/* 状态指示灯 + 取消按钮 */}
+          {/* Status指示灯 + Cancel按钮 */}
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <div className="text-sm font-medium">忙:</div>
+                <div className="text-sm font-medium">Busy:</div>
                 <div
                   className={cn(
                     'h-2 w-2 rounded-full',
@@ -127,7 +127,7 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
                 />
               </div>
               <div className="flex items-center gap-2">
-                <div className="text-sm font-medium">请求等待:</div>
+                <div className="text-sm font-medium">Requests Pending:</div>
                 <div
                   className={cn(
                     'h-2 w-2 rounded-full',
@@ -137,7 +137,7 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
               </div>
               {status?.cancellation_requested && (
                 <div className="flex items-center gap-2">
-                  <div className="text-sm font-medium">取消中:</div>
+                  <div className="text-sm font-medium">Cancelling:</div>
                   <div className="h-2 w-2 rounded-full bg-red-500" />
                 </div>
               )}
@@ -150,18 +150,18 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
                 disabled={!canCancel}
                 onClick={() => setShowCancelConfirm(true)}
                 title={
-                  status?.cancellation_requested ? '取消进行中…' : '取消当前流水线任务'
+                  status?.cancellation_requested ? 'Cancel进行中…' : 'Cancel当前流水线Task'
                 }
               >
-                取消
+                Cancel
               </Button>
             )}
           </div>
 
-          {/* 任务信息卡 */}
+          {/* Task信息卡 */}
           <div className="space-y-2 rounded-md border p-3">
             <div className="text-sm">
-              任务名: {status?.job_name || '-'}
+              Task名: {status?.job_name || '-'}
             </div>
             <div className="flex justify-between text-sm">
               <span>
@@ -186,7 +186,7 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
 
           {/* 历史消息日志区 */}
           <div className="space-y-2">
-            <div className="text-sm font-medium">流水线消息:</div>
+            <div className="text-sm font-medium">Pipeline Message:</div>
             <div
               ref={historyRef}
               onScroll={handleScroll}
@@ -206,21 +206,21 @@ export default function PipelineStatusDialog({ open, onOpenChange }: PipelineSta
         </div>
       </DialogContent>
 
-      {/* 取消二次确认 */}
+      {/* Cancel二次确认 */}
       <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>取消流水线</DialogTitle>
+            <DialogTitle>Cancel Pipeline</DialogTitle>
             <DialogDescription>
-              确定要取消当前流水线任务吗？正在处理的文档将回到等待状态。
+              确定要Cancel当前流水线Task吗？正在Processing的文档将回到等待Status。
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4 flex justify-end gap-3">
             <Button variant="outline" onClick={() => setShowCancelConfirm(false)}>
-              取消
+              Cancel
             </Button>
             <Button variant="destructive" onClick={handleConfirmCancel}>
-              确认取消
+              确认Cancel
             </Button>
           </div>
         </DialogContent>

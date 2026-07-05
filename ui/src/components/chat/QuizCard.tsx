@@ -11,13 +11,13 @@ import { QUIZ_TYPE_LABELS } from '@/api/types'
 /**
  * QuizCard — 单道题目渲染卡片。
  *
- * 渲染题面（Markdown）、选项（choice 类型显示 A/B/C/D）、
- * 答案折叠区（默认折叠，点击展开显示 correct_answer + explanation）、题型/难度标签。
+ * 渲染题面（Markdown）、Select项（choice Type显示 A/B/C/D）、
+ * 答案折叠区（默认折叠，点击展开显示 correct_answer + explanation）、Question Types/DifficultyLabels。
  */
 
 interface QuizCardProps {
   question: QuizQuestion
-  ordinal: number          // 第 N 题
+  ordinal: number          // Question N
   defaultRevealed?: boolean // 是否默认展开答案
 }
 
@@ -25,14 +25,14 @@ export default function QuizCard({ question, ordinal, defaultRevealed = false }:
   const [revealed, setRevealed] = useState(defaultRevealed)
 
   const typeLabel = QUIZ_TYPE_LABELS[question.question_type] || question.question_type
-  const diffLabel = question.difficulty === 'easy' ? '简单' : question.difficulty === 'medium' ? '中等' : question.difficulty === 'hard' ? '困难' : ''
+  const diffLabel = question.difficulty === 'easy' ? 'Easy' : question.difficulty === 'medium' ? 'Medium' : question.difficulty === 'hard' ? 'Hard' : ''
 
   return (
     <div className="rounded-xl border border-border/55 bg-card shadow-sm transition-colors">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/30">
         <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-          第 {ordinal} 题
+          Question {ordinal}
         </span>
         <span className="text-xs font-medium text-muted-foreground">{typeLabel}</span>
         {diffLabel && (
@@ -43,7 +43,7 @@ export default function QuizCard({ question, ordinal, defaultRevealed = false }:
         )}
       </div>
 
-      {/* Body — 题面 */}
+      {/* Body —面 */}
       <div className="px-4 py-3 text-sm leading-relaxed text-foreground">
         <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
           {question.question}
@@ -81,8 +81,8 @@ export default function QuizCard({ question, ordinal, defaultRevealed = false }:
       {/* Concept (T/F) */}
       {question.question_type === 'concept' && (
         <div className="px-4 pb-3 flex items-center gap-3 text-sm">
-          <span className="inline-flex items-center rounded-md px-2 py-0.5 bg-muted/30">正确</span>
-          <span className="inline-flex items-center rounded-md px-2 py-0.5 bg-muted/30">错误</span>
+          <span className="inline-flex items-center rounded-md px-2 py-0.5 bg-muted/30">Correct</span>
+          <span className="inline-flex items-center rounded-md px-2 py-0.5 bg-muted/30">Incorrect</span>
         </div>
       )}
 
@@ -96,12 +96,12 @@ export default function QuizCard({ question, ordinal, defaultRevealed = false }:
           {revealed ? (
             <>
               <ChevronUpIcon className="h-3 w-3" />
-              收起答案
+              Hide Answer
             </>
           ) : (
             <>
               <ChevronDownIcon className="h-3 w-3" />
-              显示答案
+              Show Answer
             </>
           )}
         </button>
@@ -109,12 +109,12 @@ export default function QuizCard({ question, ordinal, defaultRevealed = false }:
         {revealed && (
           <div className="mt-2 space-y-2 text-sm">
             <div>
-              <span className="font-semibold text-emerald-600">答案：</span>
+              <span className="font-semibold text-emerald-600">Answer: </span>
               <span className="text-foreground">{formatAnswer(question)}</span>
             </div>
             {question.explanation && question.explanation !== 'N/A' && (
               <div>
-                <span className="font-semibold text-muted-foreground">解析：</span>
+                <span className="font-semibold text-muted-foreground">Parsing：</span>
                 <span className="text-foreground">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                   {question.explanation}
@@ -135,7 +135,7 @@ function formatAnswer(q: QuizQuestion): string {
     return optionText ? `${q.correct_answer}. ${optionText}` : q.correct_answer
   }
   if (q.question_type === 'concept') {
-    return q.correct_answer === 'true' ? '正确' : '错误'
+    return q.correct_answer === 'true' ? 'Correct' : 'Incorrect'
   }
   return q.correct_answer
 }

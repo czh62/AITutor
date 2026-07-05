@@ -26,7 +26,7 @@ export default function AskUserCard({ payload, onRespond, disabled }: AskUserCar
       <div className="flex items-center gap-2 border-b border-emerald-200/60 bg-emerald-100/50 px-4 py-2.5 dark:border-emerald-900 dark:bg-emerald-950/40">
         <MessageCircleQuestionIcon className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
         <span className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
-          需要你确认
+          Needs your input
         </span>
       </div>
 
@@ -80,7 +80,7 @@ export default function AskUserCard({ payload, onRespond, disabled }: AskUserCar
                   <input
                     type="text"
                     className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-emerald-400"
-                    placeholder="自定义回答"
+                    placeholder="Custom answer"
                     disabled={disabled}
                     value={options.includes(current) ? '' : current}
                     onChange={(event) => setAnswer(question.id, event.target.value)}
@@ -90,7 +90,7 @@ export default function AskUserCard({ payload, onRespond, disabled }: AskUserCar
                 <textarea
                   rows={2}
                   className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-emerald-400"
-                  placeholder="输入你的回答..."
+                  placeholder="Enter your answer..."
                   disabled={disabled}
                   value={current}
                   onChange={(event) => setAnswer(question.id, event.target.value)}
@@ -116,7 +116,7 @@ export default function AskUserCard({ payload, onRespond, disabled }: AskUserCar
           )}
         >
           <SendIcon className="h-3.5 w-3.5" />
-          回复
+          Reply
         </button>
       </div>
     </div>

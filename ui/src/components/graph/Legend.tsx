@@ -15,7 +15,7 @@ const Legend: React.FC<LegendProps> = ({ className }) => {
 
   return (
     <Card className={`p-2 max-w-xs ${className}`}>
-      <h3 className="text-sm font-medium mb-2">图例</h3>
+      <h3 className="text-sm font-medium mb-2">Legend</h3>
       <div className="max-h-80 overflow-auto">
         <div className="flex flex-col gap-1">
           {Array.from(typeColorMap.entries()).map(([type, color]) => (

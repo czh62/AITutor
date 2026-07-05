@@ -4,8 +4,8 @@
  * 直连 LightRAG（默认 http://localhost:9621）的真实 HTTP API。
  * 路由前缀为 /documents（无 /api），与 LightRAG 完全一致。
  *
- * 环境变量 VITE_USE_MOCK=true 时走前端 mock 分支（开发调试用），
- * 否则全部走真实 HTTP 调用。
+ * 环境变量 VITE_USE_MOCK=true 时走前端 mock Branch（开发调试用），
+ * 否则All走真实 HTTP 调用。
  *
  * 鉴权：LightRAG AUTH_MODE=disabled 时免 token；否则需 JWT 或 API Key。
  * 当前按无鉴权模式接入；登录页与 token 拦截器后续补充。
@@ -47,7 +47,7 @@ import type {
   QuizFollowupRequest,
 } from './types'
 
-// ---- mock 数据与状态（仅 VITE_USE_MOCK=true 时使用） ----
+// ---- mock 数据与Status（仅 VITE_USE_MOCK=true 时Uses） ----
 import { mockDocuments, countByStatus, nextMockId, mockGraphData, mockGraphLabels, mockQueryAnswer, mockSearchResults } from './mockData'
 let mockStore: DocStatusResponse[] = [...mockDocuments]
 let mockPipelineActive = false
@@ -215,12 +215,12 @@ function normalizeMasteryDetail(raw: RawMasteryDetail): MasteryDocumentDetail {
 }
 
 // ============================================================
-//  1. 分页查询文档列表
+//  1. 分页Query文档列表
 // ============================================================
 
 /**
  * POST /documents/paginated
- * 分页查询文档列表（支持状态过滤、排序）。
+ * 分页Query文档列表（Supported: Status过滤、排序）。
  * LightRAG 真实接口为 POST（body 传参），不是 GET query。
  */
 export async function getDocumentsPaginated(
@@ -301,30 +301,30 @@ async function getDocumentsPaginatedMock(
 
 /**
  * POST /documents/scan
- * 扫描输入目录中的新文档，并重新处理所有失败的文档。
+ * 扫描输入目录中的新文档，并重新Processing所有Failed的文档。
  */
 export async function scanNewDocuments(): Promise<ScanResult> {
   if (USE_MOCK) {
     await delay(400)
     if (mockPipelineActive) {
-      return { status: 'scanning_skipped_pipeline_busy', message: '流水线被占用，已跳过本次扫描' }
+      return { status: 'scanning_skipped_pipeline_busy', message: 'Pipeline is busy. Scan skipped.' }
     }
     mockPipelineActive = true
-    beginMockJob('扫描/重试')
-    return { status: 'scanning_started', message: '扫描已启动' }
+    beginMockJob('Scan / Retry')
+    return { status: 'scanning_started', message: 'Scan started' }
   }
   const resp = await api.post<ScanResult>('/documents/scan')
   return resp.data
 }
 
 // ============================================================
-//  3. 上传文档
+//  3. Upload Documents
 // ============================================================
 
 /**
  * POST /documents/upload
- * 上传单个文档（multipart/form-data，字段名 file）。
- * onProgress 回调用于上报上传进度百分比。
+ * Upload单个文档（multipart/form-data，字段名 file）。
+ * onProgress 回调用于上报Upload进度百分比。
  */
 export async function uploadDocument(
   file: File,
@@ -355,7 +355,7 @@ async function uploadDocumentMock(
   const newDoc: DocStatusResponse = {
     id: nextMockId(),
     file_path: file.name,
-    content_summary: `${file.name} 的内容摘要（mock）`,
+    content_summary: `Mock content summary for ${file.name}`,
     content_length: file.size,
     chunks_count: 0,
     status: 'pending',
@@ -368,25 +368,25 @@ async function uploadDocumentMock(
     createMockMasterySummary(newDoc.id, file.name, 'waiting_rag', 'pending'),
     ...mockMasteryDocuments
   ]
-  pushHistory(`[上传] ${file.name} 已加入处理队列`)
+  pushHistory(`[Upload] ${file.name} was added to the processing queue`)
   setTimeout(() => {
     const target = mockStore.find((d) => d.id === newDoc.id)
     if (target) {
       target.status = 'parsing'
       target.updated_at = new Date().toISOString()
     }
-    beginMockJob(`上传 ${file.name}`)
+    beginMockJob(`Upload ${file.name}`)
   }, 800)
-  return { status: 'success', message: `${file.name} 上传成功`, track_id: newDoc.id }
+  return { status: 'success', message: `${file.name} uploaded successfully`, track_id: newDoc.id }
 }
 
 // ============================================================
-//  4. 删除指定文档
+//  4. Delete指定文档
 // ============================================================
 
 /**
  * DELETE /documents/delete_document
- * 删除指定文档。LightRAG 真实路径是 /delete_document（不是根路径 DELETE），
+ * Delete指定文档。LightRAG 真实路径是 /delete_document（不是根路径 DELETE），
  * 请求体字段为 doc_ids（不是 ids）。
  */
 export async function deleteDocuments(
@@ -397,7 +397,7 @@ export async function deleteDocuments(
   if (USE_MOCK) {
     await delay(500)
     mockStore = mockStore.filter((d) => !docIds.includes(d.id))
-    return { status: 'success', message: `已删除 ${docIds.length} 个文档` }
+    return { status: 'success', message: `Deleted ${docIds.length} documents` }
   }
   const resp = await api.delete<DeleteDocumentsResult>('/documents/delete_document', {
     data: { doc_ids: docIds, delete_file: deleteFile, delete_llm_cache: deleteLLMCache }
@@ -406,19 +406,19 @@ export async function deleteDocuments(
 }
 
 // ============================================================
-//  5. 清空所有文档
+//  5. Clear所有文档
 // ============================================================
 
 /**
  * DELETE /documents
- * 清空所有文档。LightRAG 真实路径是 /documents 根路径 DELETE。
+ * Clear所有文档。LightRAG 真实路径是 /documents 根路径 DELETE。
  * 清 LLM 缓存是独立接口 POST /documents/clear_cache。
  */
 export async function clearDocuments(): Promise<ClearDocumentsResult> {
   if (USE_MOCK) {
     await delay(700)
     mockStore = []
-    return { status: 'success', message: '已清空所有文档' }
+    return { status: 'success', message: 'All documents cleared' }
   }
   const resp = await api.delete<ClearDocumentsResult>('/documents')
   return resp.data
@@ -426,24 +426,24 @@ export async function clearDocuments(): Promise<ClearDocumentsResult> {
 
 /**
  * POST /documents/clear_cache
- * 清空 LLM 缓存（独立接口，非清空文档的一部分）。
+ * Clear LLM Cache（独立接口，非Clear Documents的一部分）。
  */
 export async function clearCache(): Promise<{ status: 'success' | 'fail'; message?: string }> {
   if (USE_MOCK) {
     await delay(300)
-    return { status: 'success', message: '缓存已清空' }
+    return { status: 'success', message: 'Cache cleared' }
   }
   const resp = await api.post<{ status: 'success' | 'fail'; message?: string }>('/documents/clear_cache')
   return resp.data
 }
 
 // ============================================================
-//  6. 流水线状态
+//  6. Pipeline Status
 // ============================================================
 
 /**
  * GET /documents/pipeline_status
- * 获取文档处理流水线状态（对齐 LightRAG 真实契约）。
+ * 获取文档ProcessingPipeline Status（对齐 LightRAG 真实契约）。
  * 注意：LightRAG 用下划线（pipeline_status），不是连字符（pipeline-status）。
  */
 export async function getPipelineStatus(): Promise<PipelineStatus> {
@@ -469,22 +469,22 @@ export async function getPipelineStatus(): Promise<PipelineStatus> {
 }
 
 // ============================================================
-//  7. 取消流水线
+//  7. Cancel Pipeline
 // ============================================================
 
 /**
  * POST /documents/cancel_pipeline
- * 请求取消当前流水线任务。
+ * 请求Cancel当前流水线Task。
  */
 export async function cancelPipeline(): Promise<CancelPipelineResult> {
   if (USE_MOCK) {
     await delay(300)
     if (!mockPipelineActive) {
-      return { status: 'not_busy', message: '流水线当前空闲' }
+      return { status: 'not_busy', message: 'Pipeline is idle' }
     }
     mockCancellationRequested = true
-    pushHistory(`[取消] 已请求取消流水线任务（${mockJob.name}）`)
-    return { status: 'cancellation_requested', message: '取消请求已发送' }
+    pushHistory(`[Cancel] Cancel pipeline requestedTask（${mockJob.name}）`)
+    return { status: 'cancellation_requested', message: 'Cancel request sent' }
   }
   const resp = await api.post<CancelPipelineResult>('/documents/cancel_pipeline')
   return resp.data
@@ -512,12 +512,12 @@ export async function checkHealth(): Promise<HealthStatus> {
 }
 
 // ============================================================
-//  9. 状态计数（额外接口，LightRAG 独立提供）
+//  9. Status计数（额外接口，LightRAG 独立提供）
 // ============================================================
 
 /**
  * GET /documents/status_counts
- * 获取各状态的文档数量（LightRAG 独立接口）。
+ * 获取各Status的文档数量（LightRAG 独立接口）。
  */
 export async function getStatusCounts(): Promise<Record<string, number>> {
   if (USE_MOCK) {
@@ -529,12 +529,12 @@ export async function getStatusCounts(): Promise<Record<string, number>> {
 }
 
 // ============================================================
-//  10. 知识图谱
+//  10. Knowledge Graph
 // ============================================================
 
 /**
  * GET /graphs?label=&max_depth=&max_nodes=
- * 按 label 查询知识图谱（节点+边）。label 为 * 时返回全局图谱。
+ * 按 label QueryKnowledge Graph（Nodes+Edges）。label 为 * 时返回全局图谱。
  */
 export async function queryGraphs(
   label: string,
@@ -562,7 +562,7 @@ export async function queryGraphs(
 
 /**
  * GET /graph/label/list
- * 全部实体标签。
+ * All实体Labels。
  */
 export async function getGraphLabels(): Promise<string[]> {
   if (USE_MOCK) {
@@ -575,7 +575,7 @@ export async function getGraphLabels(): Promise<string[]> {
 
 /**
  * GET /graph/label/popular?limit=
- * 热门实体标签。
+ * 热门实体Labels。
  */
 export async function getPopularLabels(limit: number = 300): Promise<string[]> {
   if (USE_MOCK) {
@@ -588,7 +588,7 @@ export async function getPopularLabels(limit: number = 300): Promise<string[]> {
 
 /**
  * GET /graph/label/search?q=&limit=
- * 搜索实体标签。
+ * 搜索实体Labels。
  */
 export async function searchLabels(query: string, limit: number = 50): Promise<string[]> {
   if (USE_MOCK) {
@@ -603,7 +603,7 @@ export async function searchLabels(query: string, limit: number = 50): Promise<s
 }
 
 // ============================================================
-//  11. 知识点学习路径
+//  11. Knowledge PointsLearning Path
 // ============================================================
 
 export async function getMasteryDocuments(): Promise<{ documents: MasteryDocumentSummary[] }> {
@@ -646,7 +646,7 @@ export async function studyKnowledgePoint(
     const knowledgePoint = findMockKnowledgePoint(detail, knowledgePointId)
     return {
       knowledge_point: knowledgePoint,
-      study_prompt: `请用自己的话解释「${knowledgePoint.title}」，并说明它在文档中的作用。`,
+      study_prompt: `Explain "${knowledgePoint.title}" in your own words and describe its role in the document.`,
       next_step: detail.next_step
     }
   }
@@ -746,9 +746,9 @@ export async function startKnowledgePointLearning(
       doc_id: docId,
       knowledge_point_id: knowledgePointId,
       prompt: [
-        `请作为一位耐心的导师，带我学习文档《${detail.title}》中的知识点「${point.title}」。`,
-        `先用文档语境解释它是什么、为什么重要、依赖哪些前置概念，再问我一个开放问题确认我是否理解。`,
-        `知识点描述：${point.description}`
+        `Act as a patient tutor and help me learn the knowledge point "${point.title}" from document "${detail.title}".`,
+        `First explain what it is, why it matters, and which prerequisite concepts it depends on in the document context. Then ask me one open-ended question to check my understanding.`,
+        `Knowledge point description: ${point.description}`
       ].join('\n'),
       document: detail
     }
@@ -837,8 +837,8 @@ export async function createMasteryQuiz(
     const knowledgePoint = findMockKnowledgePoint(detail, knowledgePointId)
     return {
       knowledge_point_id: knowledgePoint.id,
-      question: `请说明「${knowledgePoint.title}」的核心概念，并举一个应用场景。`,
-      expected_points: ['定义准确', '能解释依赖关系', '能给出例子'],
+      question: `Explain the core concept of "${knowledgePoint.title}" and give one application scenario.`,
+      expected_points: ['Accurate definition', 'Explains dependency relations', 'Gives an example'],
       next_step: detail.next_step
     }
   }
@@ -868,8 +868,8 @@ export async function gradeMasteryAnswer(
     return {
       passed: answer.trim().length >= 24,
       score: answer.trim().length >= 24 ? 82 : 45,
-      feedback: answer.trim().length >= 24 ? '回答覆盖了关键点。' : '回答还需要补充定义和应用例子。',
-      retry_question: answer.trim().length >= 24 ? null : '再用一个具体例子解释这个知识点。',
+      feedback: answer.trim().length >= 24 ? 'The answer covers the key points.' : 'The answer needs more definition detail and an application example.',
+      retry_question: answer.trim().length >= 24 ? null : 'Explain this knowledge point again with a concrete example.',
       next_step: mockNextStep,
       document: getMockMasteryDetail(docId)
     }
@@ -890,8 +890,8 @@ export async function gradeMasteryAnswer(
     score: Math.round(resp.data.mastery * 100),
     mastery: resp.data.mastery,
     mastered: resp.data.mastered,
-    feedback: resp.data.is_correct ? '回答通过，掌握度已更新。' : '回答未通过，请补充关键定义或例子后再试。',
-    retry_question: resp.data.is_correct ? null : '请重新组织答案，覆盖定义、依赖关系和应用场景。',
+    feedback: resp.data.is_correct ? 'Answer passed. Mastery has been updated.' : 'Answer did not pass. Add key definitions or examples and try again.',
+    retry_question: resp.data.is_correct ? null : 'Rewrite the answer to cover definition, dependency relations, and application scenarios.',
     next_step: normalizeNextStep(resp.data.next),
     document
   }
@@ -960,11 +960,11 @@ export async function clearMasteryDocuments(): Promise<{ status: 'success'; dele
 const mockNextStep: MasteryNextStep = {
   action: 'practice',
   module_id: 'mock_m1',
-  module_title: '文档理解基础',
+  module_title: 'Document Understanding Basics',
   knowledge_point_id: 'mock_m1_kp2',
-  knowledge_point_title: '核心概念关系',
-  reason: '继续巩固当前模块的依赖关系',
-  prompt: '请选择一个未掌握的知识点继续学习。'
+  knowledge_point_title: 'Core Concept Relations',
+  reason: 'Keep reinforcing dependency relations in the current module',
+  prompt: 'Choose an unmastered knowledge point to continue learning.'
 }
 
 function createMockMasterySummary(
@@ -990,20 +990,20 @@ function createMockMasterySummary(
 }
 
 let mockMasteryDocuments: MasteryDocumentSummary[] = [
-  createMockMasterySummary('mock-doc-1', 'DeepTutor 设计理念.md', 'ready', 'processed'),
-  createMockMasterySummary('mock-doc-2', 'LightRAG 接入说明.pdf', 'waiting_rag', 'processing')
+  createMockMasterySummary('mock-doc-1', 'DeepTutor Design Notes.md', 'ready', 'processed'),
+  createMockMasterySummary('mock-doc-2', 'LightRAG Integration Guide.pdf', 'waiting_rag', 'processing')
 ]
 
 const mockMasteryModules: MasteryModule[] = [
   {
     id: 'mock_m1',
-    title: '文档理解基础',
-    summary: '建立学习路线所需的概念和依赖关系。',
+    title: 'Document Understanding Basics',
+    summary: 'Build the concepts and dependency relations needed for a learning path.',
     knowledge_points: [
       {
         id: 'mock_m1_kp1',
-        title: '主题识别',
-        description: '从文档中提取核心主题、目标读者和章节结构。',
+        title: 'Topic Identification',
+        description: 'Extract core topics, target audience, and chapter structure from the document.',
         knowledge_type: 'concept',
         status: 'mastered',
         mastery_level: 90,
@@ -1013,8 +1013,8 @@ const mockMasteryModules: MasteryModule[] = [
       },
       {
         id: 'mock_m1_kp2',
-        title: '核心概念关系',
-        description: '理解概念之间的前置、包含和应用关系。',
+        title: 'Core Concept Relations',
+        description: 'Understand prerequisite, inclusion, and application relations between concepts.',
         knowledge_type: 'procedure',
         status: 'learning',
         mastery_level: 54,
@@ -1024,8 +1024,8 @@ const mockMasteryModules: MasteryModule[] = [
       },
       {
         id: 'mock_m1_kp3',
-        title: '学习目标拆解',
-        description: '将知识点拆分为可练习、可测验、可复习的学习目标。',
+        title: 'Learning Goal Breakdown',
+        description: 'Break knowledge points into practiceable, testable, and reviewable learning goals.',
         knowledge_type: 'design',
         status: 'new',
         mastery_level: 0,
@@ -1075,21 +1075,21 @@ function findMockKnowledgePoint(
 }
 
 // ============================================================
-//  Mock 流水线模拟（仅 USE_MOCK=true 时使用）
+//  Mock 流水线模拟（仅 USE_MOCK=true 时Uses）
 // ============================================================
 
 function beginMockJob(reason: string) {
   mockPipelineActive = true
   mockCancellationRequested = false
   mockJob = {
-    name: '文档索引流水线',
+    name: 'Document indexing pipeline',
     start: Date.now(),
     curBatch: 0,
     totalBatches: mockStore.filter((d) =>
       ['pending', 'parsing', 'analyzing', 'processing', 'failed'].includes(d.status)
     ).length || 1
   }
-  pushHistory(`[启动] ${reason}：开始处理 ${mockJob.totalBatches} 个文档批次`)
+  pushHistory(`[Start] ${reason}: processing ${mockJob.totalBatches} document batches`)
   startMockPipeline()
 }
 
@@ -1097,7 +1097,7 @@ function startMockPipeline() {
   if (mockPipelineTimer) return
   mockPipelineTimer = setInterval(() => {
     if (mockCancellationRequested) {
-      pushHistory('[取消] 流水线已停止，剩余文档回到等待状态')
+      pushHistory('[Cancel] Pipeline stopped. Remaining documents returned to pending status')
       for (const d of mockStore) {
         if (['parsing', 'analyzing', 'processing'].includes(d.status)) {
           d.status = 'pending'
@@ -1125,7 +1125,7 @@ function startMockPipeline() {
           d.chunks_count = Math.max(1, Math.floor((d.content_length ?? 1000) / 4000))
         }
         mockJob.curBatch = Math.min(mockJob.curBatch + 1, mockJob.totalBatches)
-        pushHistory(`[处理] ${d.file_path}：${prev} -> ${d.status}`)
+        pushHistory(`[Processing] ${d.file_path}：${prev} -> ${d.status}`)
         break
       }
     }
@@ -1134,7 +1134,7 @@ function startMockPipeline() {
       ['pending', 'parsing', 'analyzing', 'processing'].includes(d.status)
     )
     if (!active) {
-      pushHistory('[完成] 所有文档处理完毕')
+      pushHistory('[Done] All documents processed')
       mockPipelineActive = false
       mockJob.start = null
       if (mockPipelineTimer) {
@@ -1146,13 +1146,13 @@ function startMockPipeline() {
 }
 
 // ============================================================
-//  11. 知识问答（流式查询）
+//  11. Knowledge Q&A（流式Query）
 // ============================================================
 
 /**
- * POST /query/stream — NDJSON 流式查询。
- * 逐行解析 AgentLoop StreamEvent，按 type 路由到回调：
- * - content → onChunk（最终回答）
+ * POST /query/stream — NDJSON 流式Query。
+ * 逐行Parsing AgentLoop StreamEvent，按 type 路由到回调：
+ * - content → onChunk（最终Answer）
  * - references/sources → onReferences
  * - wait_for_input → onWaitForInput（ask_user 暂停）
  * - session → onSession
@@ -1189,7 +1189,7 @@ export async function queryStream(
       signal
     })
     if (!resp.ok || !resp.body) {
-      onError?.(`查询失败：HTTP ${resp.status}`)
+      onError?.(`QueryFailed：HTTP ${resp.status}`)
       return
     }
     await _consumeNdjson(resp, {
@@ -1203,8 +1203,8 @@ export async function queryStream(
 
 /**
  * POST /query/resume — ask_user 恢复流。
- * 用户回答 ask_user 问题后，把 answers 发回后端，继续暂停的 loop。
- * NDJSON 解析逻辑与 queryStream 共用 _consumeNdjson。
+ * 用户Answer ask_user Question后，把 answers 发回后端，继续暂停的 loop。
+ * NDJSON Parsing逻辑与 queryStream 共用 _consumeNdjson。
  */
 export async function resumeStream(
   sessionId: string,
@@ -1232,7 +1232,7 @@ export async function resumeStream(
       signal
     })
     if (!resp.ok || !resp.body) {
-      onError?.(`恢复失败：HTTP ${resp.status}`)
+      onError?.(`Resume failed: HTTP ${resp.status}`)
       return
     }
     await _consumeNdjson(resp, {
@@ -1314,7 +1314,7 @@ async function _consumeNdjson(
             onLoopEvent({ type: 'session', round: 0, content: '', metadata })
           }
         } else if (eventType === 'error') {
-          onError?.(parsed.content || parsed.error || '查询失败')
+          onError?.(parsed.content || parsed.error || 'QueryFailed')
         } else if (eventType === 'done') {
           // 流结束
         } else if (eventType && onLoopEvent) {
@@ -1332,7 +1332,7 @@ async function _consumeNdjson(
           onError?.(parsed.error)
         }
       } catch {
-        /* 跳过无法解析的行 */
+        /* 跳过无法Parsing的行 */
       }
     }
   }
@@ -1359,39 +1359,39 @@ async function queryStreamMock(
     await delay(200)
     if (signal?.aborted) return
 
-    // Round 0: observation (检索)
-    onLoopEvent({ type: 'observation', round: 0, content: '检索到 2 个相关段落（mock）...', metadata: { query: request.query, call_id: 'agent_loop_round_0', call_kind: 'agent_loop_round', call_role: 'retrieve' } })
+    // Round 0: observation (Retrieval)
+    onLoopEvent({ type: 'observation', round: 0, content: 'Retrieved 2 relevant passages (mock)...', metadata: { query: request.query, call_id: 'agent_loop_round_0', call_kind: 'agent_loop_round', call_role: 'retrieve' } })
     await delay(150)
 
-    // 联网搜索（如果勾选了 force_web_search）
+    // Web Search（如果勾Select了 force_web_search）
     if (request.force_web_search) {
-      onLoopEvent({ type: 'search', round: 0, content: `正在联网搜索「${request.query}」...`, metadata: { query: request.query, provider: 'duckduckgo', status: 'searching', call_id: 'search_round_0', call_kind: 'web_search' } })
+      onLoopEvent({ type: 'search', round: 0, content: `Searching the web for "${request.query}"...`, metadata: { query: request.query, provider: 'duckduckgo', status: 'searching', call_id: 'search_round_0', call_kind: 'web_search' } })
       await delay(500)
-      onLoopEvent({ type: 'search', round: 0, content: '找到 3 条网络结果', metadata: { query: request.query, provider: 'duckduckgo', status: 'complete', results: mockSearchResults, call_id: 'search_round_0', call_kind: 'web_search' } })
+      onLoopEvent({ type: 'search', round: 0, content: 'Found 3 web results', metadata: { query: request.query, provider: 'duckduckgo', status: 'complete', results: mockSearchResults, call_id: 'search_round_0', call_kind: 'web_search' } })
       await delay(200)
     }
 
     onReferences?.(references)
     await delay(100)
 
-    // Round 0: thinking (insufficient) — 评估LLM调用
-    onLoopEvent({ type: 'thinking', round: 0, content: 'Mock: 上下文不够完整，需要补充细节', metadata: { quality: 'insufficient', need_web_search: request.force_web_search, call_id: 'eval_round_0', call_kind: 'llm_evaluation', call_role: 'thought' } })
+    // Round 0: thinking (insufficient) — EvaluationLLM调用
+    onLoopEvent({ type: 'thinking', round: 0, content: 'Mock: context is incomplete and needs more details', metadata: { quality: 'insufficient', need_web_search: request.force_web_search, call_id: 'eval_round_0', call_kind: 'llm_evaluation', call_role: 'thought' } })
     await delay(100)
-    onLoopEvent({ type: 'progress', round: 0, content: '上下文不充分', metadata: { quality: 'insufficient', rewritten_query: `${request.query} 的详细解释`, missing_aspects: ['细节'], need_web_search: request.force_web_search, call_id: 'agent_loop_round_0', call_kind: 'agent_loop_round', call_role: 'narration' } })
+    onLoopEvent({ type: 'progress', round: 0, content: 'Context insufficient', metadata: { quality: 'insufficient', rewritten_query: `Detailed explanation of ${request.query}`, missing_aspects: ['details'], need_web_search: request.force_web_search, call_id: 'agent_loop_round_0', call_kind: 'agent_loop_round', call_role: 'narration' } })
     await delay(200)
 
     // Round 1: query_rewrite
-    onLoopEvent({ type: 'query_rewrite', round: 1, content: `${request.query} 的详细解释`, metadata: { original_query: request.query, call_id: 'agent_loop_round_0', call_kind: 'agent_loop_round', call_role: 'narration' } })
+    onLoopEvent({ type: 'query_rewrite', round: 1, content: `Detailed explanation of ${request.query}`, metadata: { original_query: request.query, call_id: 'agent_loop_round_0', call_kind: 'agent_loop_round', call_role: 'narration' } })
     await delay(150)
 
-    // Round 1: observation (检索)
-    onLoopEvent({ type: 'observation', round: 1, content: '检索到 4 个相关段落（mock）...', metadata: { query: `${request.query} 的详细解释`, call_id: 'agent_loop_round_1', call_kind: 'agent_loop_round', call_role: 'retrieve' } })
+    // Round 1: observation (Retrieval)
+    onLoopEvent({ type: 'observation', round: 1, content: 'Retrieved 4 relevant passages (mock)...', metadata: { query: `Detailed explanation of ${request.query}`, call_id: 'agent_loop_round_1', call_kind: 'agent_loop_round', call_role: 'retrieve' } })
     await delay(100)
 
-    // Round 1: thinking (sufficient) — 评估LLM调用
-    onLoopEvent({ type: 'thinking', round: 1, content: 'Mock: 上下文已充分覆盖核心概念', metadata: { quality: 'sufficient', call_id: 'eval_round_1', call_kind: 'llm_evaluation', call_role: 'thought' } })
+    // Round 1: thinking (sufficient) — EvaluationLLM调用
+    onLoopEvent({ type: 'thinking', round: 1, content: 'Mock: context sufficiently covers the core concept', metadata: { quality: 'sufficient', call_id: 'eval_round_1', call_kind: 'llm_evaluation', call_role: 'thought' } })
     await delay(100)
-    onLoopEvent({ type: 'progress', round: 1, content: '上下文充分', metadata: { quality: 'sufficient', call_id: 'agent_loop_round_1', call_kind: 'agent_loop_round', call_role: 'finish' } })
+    onLoopEvent({ type: 'progress', round: 1, content: 'Context sufficient', metadata: { quality: 'sufficient', call_id: 'agent_loop_round_1', call_kind: 'agent_loop_round', call_role: 'finish' } })
 
     // result
     onLoopEvent({ type: 'result', round: 0, content: '', metadata: { rounds: 2, completed: true, engine: 'agent_loop', call_id: 'loop_summary' } })
@@ -1400,7 +1400,7 @@ async function queryStreamMock(
     onReferences?.(references)
   }
 
-  // 最终回答 chunks — call_kind="llm_final_response" + call_role="finish"
+  // 最终Answer chunks — call_kind="llm_final_response" + call_role="finish"
   for (const chunk of chunks) {
     if (signal?.aborted) return
     onChunk(chunk)
@@ -1410,14 +1410,14 @@ async function queryStreamMock(
 }
 
 // ============================================================
-//  12. 出题流式接口
+//  12. Quiz流式接口
 // ============================================================
 
 /**
- * POST /quiz/generate/stream — NDJSON 流式出题。
- * 逐行解析 QuizService StreamEvent，按 type + metadata.call_kind 路由到回调：
- * - progress → onProgress（出题进度消息）
- * - content + call_kind="quiz_question" → onQuestion（解析题目 JSON）
+ * POST /quiz/generate/stream — NDJSON 流式Quiz。
+ * 逐行Parsing QuizService StreamEvent，按 type + metadata.call_kind 路由到回调：
+ * - progress → onProgress（Quiz进度消息）
+ * - content + call_kind="quiz_question" → onQuestion（Parsing题目 JSON）
  * - result → onResult（所有题目完成）
  * - error → onError
  */
@@ -1447,7 +1447,7 @@ export async function quizGenerateStream(
       signal
     })
     if (!resp.ok || !resp.body) {
-      onError(`出题失败：HTTP ${resp.status}`)
+      onError(`QuizFailed：HTTP ${resp.status}`)
       return
     }
 
@@ -1477,7 +1477,7 @@ export async function quizGenerateStream(
               onLoopEvent({ type: 'progress', round: parsed.round ?? 0, content: String(content), metadata })
             }
           } else if (eventType === 'content' && metadata.call_kind === 'quiz_question') {
-            // 题目 JSON 在 metadata.question 中
+            //目 JSON 在 metadata.question 中
             const qData = metadata.question as QuizQuestion | undefined
             if (qData) {
               onQuestion(qData)
@@ -1487,7 +1487,7 @@ export async function quizGenerateStream(
               onLoopEvent({ type: 'content', round: parsed.round ?? 0, content: String(content), metadata })
             }
           } else if (eventType === 'result') {
-            // Result 事件也包含完整题目列表
+            // Result 事件也Includes完整题目列表
             const resultQuestions = metadata.questions as QuizQuestion[] | undefined
             if (resultQuestions && Array.isArray(resultQuestions)) {
               // 如果 content 事件没有捕获题目，从 result 补充
@@ -1500,14 +1500,14 @@ export async function quizGenerateStream(
             }
             onResult(allQuestions)
           } else if (eventType === 'error') {
-            onError(String(content) || '出题失败')
+            onError(String(content) || 'QuizFailed')
           } else if (eventType === 'session' || eventType === 'stage_start' || eventType === 'stage_end' || eventType === 'thinking') {
             if (onLoopEvent) {
               onLoopEvent({ type: eventType as LoopEvent['type'], round: parsed.round ?? 0, content: String(content), metadata })
             }
           }
         } catch {
-          /* 跳过无法解析的行 */
+          /* 跳过无法Parsing的行 */
         }
       }
     }
@@ -1545,8 +1545,8 @@ async function quizGenerateStreamMock(
     await delay(300)
   }
 
-  await emitProgress(`正在分析「${request.topic}」的考点`, 0)
-  await emitProgress('正在生成题目与参考答案', 1)
+  await emitProgress(`Analyzing key points for "${request.topic}"`, 0)
+  await emitProgress('Generating questions and reference answers', 1)
 
   for (let index = 0; index < request.num_questions; index += 1) {
     if (signal?.aborted) return
@@ -1555,16 +1555,16 @@ async function quizGenerateStreamMock(
       question_id: `mock-quiz-${Date.now()}-${index + 1}`,
       question_type: questionType,
       question: questionType === 'choice'
-        ? `关于「${request.topic}」，下列哪一项最能体现核心概念？`
-        : `请结合文档语境说明「${request.topic}」的第 ${index + 1} 个关键点。`,
-      correct_answer: questionType === 'choice' ? 'A' : '应覆盖定义、依赖关系和一个文档中的应用场景。',
-      explanation: '这是 mock 题目；真实环境会由后端 AgentLoop 根据文档上下文生成。',
+        ? `For "${request.topic}", which option best captures the core concept?`
+        : `Explain key point ${index + 1} for "${request.topic}" using the document context.`,
+      correct_answer: questionType === 'choice' ? 'A' : 'The answer should cover the definition, dependency relations, and one application scenario from the document.',
+      explanation: 'This is a mock question. In a real environment, the backend AgentLoop generates it from document context.',
       options: questionType === 'choice'
         ? {
-            A: '先明确概念，再说明依赖与应用',
-            B: '只记住章节标题',
-            C: '跳过前置知识直接做题',
-            D: '只关注术语翻译'
+            A: 'Define the concept first, then explain dependencies and applications',
+            B: 'Only memorize chapter titles',
+            C: 'Skip prerequisites and go straight to exercises',
+            D: 'Only focus on term translation'
           }
         : null,
       topic: request.topic,
@@ -1587,11 +1587,11 @@ async function quizGenerateStreamMock(
   }
 
   if (signal?.aborted) return
-  onProgress('出题完成')
+  onProgress('Quiz ready')
   onLoopEvent?.({
     type: 'result',
     round: 0,
-    content: '出题完成',
+    content: 'Quiz ready',
     metadata: { questions, call_id: 'mock_quiz_result', call_kind: 'quiz_result' }
   })
   onResult(questions)
@@ -1603,7 +1603,7 @@ async function quizGenerateStreamMock(
 
 /**
  * POST /quiz/judge/stream — NDJSON 流式 AI 判题。
- * 逐行解析 StreamEvent，按 type + metadata.call_kind 路由到回调：
+ * 逐行Parsing StreamEvent，按 type + metadata.call_kind 路由到回调：
  * - content + call_kind="quiz_judge" → onChunk（判词文本增量）
  * - result → onDone（判题完成，携带完整判词）
  * - error → onError
@@ -1629,7 +1629,7 @@ export async function quizJudgeStream(
       signal,
     })
     if (!resp.ok || !resp.body) {
-      onError(`判题失败：HTTP ${resp.status}`)
+      onError(`Grading failed: HTTP ${resp.status}`)
       return
     }
 
@@ -1663,12 +1663,12 @@ export async function quizJudgeStream(
             if (judgment) fullText = judgment
             onDone(fullText)
           } else if (eventType === 'error') {
-            onError(String(content) || '判题失败')
+            onError(String(content) || 'Grading failed')
           } else if (eventType === 'stage_start' || eventType === 'done') {
             // 忽略
           }
         } catch {
-          /* 跳过无法解析的行 */
+          /* 跳过无法Parsing的行 */
         }
       }
     }
@@ -1679,12 +1679,12 @@ export async function quizJudgeStream(
 }
 
 // ============================================================
-//  14. 追问讲解流式接口
+//  14. Ask Follow-up流式接口
 // ============================================================
 
 /**
- * POST /quiz/followup/stream — NDJSON 流式追问讲解。
- * 逐行解析 StreamEvent，按 type + metadata.call_kind 路由到回调：
+ * POST /quiz/followup/stream — NDJSON 流式Ask Follow-up。
+ * 逐行Parsing StreamEvent，按 type + metadata.call_kind 路由到回调：
  * - content + call_kind="quiz_followup" → onChunk（讲解文本增量）
  * - result → onDone（讲解完成）
  * - error → onError
@@ -1710,7 +1710,7 @@ export async function quizFollowupStream(
       signal,
     })
     if (!resp.ok || !resp.body) {
-      onError(`追问讲解失败：HTTP ${resp.status}`)
+      onError(`Ask Follow-upFailed：HTTP ${resp.status}`)
       return
     }
 
@@ -1744,12 +1744,12 @@ export async function quizFollowupStream(
             if (followupAnswer) fullText = followupAnswer
             onDone(fullText)
           } else if (eventType === 'error') {
-            onError(String(content) || '追问讲解失败')
+            onError(String(content) || 'Ask Follow-upFailed')
           } else if (eventType === 'stage_start' || eventType === 'done') {
             // 忽略
           }
         } catch {
-          /* 跳过无法解析的行 */
+          /* 跳过无法Parsing的行 */
         }
       }
     }

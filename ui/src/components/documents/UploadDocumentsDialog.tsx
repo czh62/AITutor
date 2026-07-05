@@ -27,7 +27,7 @@ const DOCUMENT_UPLOAD_ACCEPT = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
 }
 const DOCUMENT_UPLOAD_EXTENSIONS = ['.txt', '.md', '.pdf', '.docx']
-const DOCUMENT_TYPE_ERROR = '仅支持 TXT、MD、PDF、DOCX 文件'
+const DOCUMENT_TYPE_ERROR = '仅Supported:  TXT、MD、PDF、DOCX 文件'
 const ACCEPTED_UPLOAD_STATUSES = new Set(['success', 'partial_success'])
 
 export default function UploadDocumentsDialog({
@@ -57,12 +57,12 @@ export default function UploadDocumentsDialog({
         files.forEach((f) => delete next[f.name])
         return next
       })
-      const toastId = toast.loading('正在上传文件...')
+      const toastId = toast.loading('Uploading files...')
       let hasAcceptedUpload = false
       let hasFailure = false
       let batchTriggered = false
 
-      // 按文件名排序后顺序上传
+      // 按File Name排序后顺序Upload
       const sorted = [...files].sort((a, b) =>
         new Intl.Collator(['zh-CN', 'en'], { numeric: true }).compare(a.name, b.name)
       )
@@ -90,9 +90,9 @@ export default function UploadDocumentsDialog({
       }
 
       if (hasFailure) {
-        toast.error('部分文件上传失败', { id: toastId })
+        toast.error('Some files failed to upload', { id: toastId })
       } else {
-        toast.success('上传成功，正在后台处理', { id: toastId, duration: 2000 })
+        toast.success('Upload successful. Processing in the background.', { id: toastId, duration: 2000 })
       }
       setIsUploading(false)
       if (hasAcceptedUpload && !hasFailure) {
@@ -118,18 +118,18 @@ export default function UploadDocumentsDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="default" size="sm" title="上传文档">
-          <UploadIcon /> 上传
+        <Button variant="default" size="sm" title="Upload Documents">
+          <UploadIcon /> Upload
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>上传文档</DialogTitle>
-          <DialogDescription>拖拽文件到此处或点击浏览</DialogDescription>
+          <DialogTitle>Upload Documents</DialogTitle>
+          <DialogDescription>Drag files here or click to browse.</DialogDescription>
         </DialogHeader>
         <FileUploader
           maxSize={200 * 1024 * 1024}
-          description="仅支持 TXT、MD、PDF、DOCX 文件，单文件最大 200MB"
+          description="仅Supported:  TXT、MD、PDF、DOCX 文件，单文件最大 200MB"
           accept={DOCUMENT_UPLOAD_ACCEPT}
           extensions={DOCUMENT_UPLOAD_EXTENSIONS}
           onUpload={handleUpload}

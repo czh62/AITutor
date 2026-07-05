@@ -75,7 +75,7 @@ export default function FileUploader({
         <input {...getInputProps()} />
         <UploadCloudIcon className="h-8 w-8 text-muted-foreground" />
         <p className="text-sm font-medium">
-          {isDragActive ? '释放即可上传' : '拖放文件到此处，或点击选择文件'}
+          {isDragActive ? '释放即可Upload' : '拖放文件到此处，或点击Select择文件'}
         </p>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
@@ -98,7 +98,7 @@ export default function FileUploader({
                       type="button"
                       onClick={() => removeFile(file.name)}
                       className="ml-2 rounded-sm opacity-60 hover:opacity-100"
-                      aria-label="移除文件"
+                      aria-label="Remove file"
                     >
                       <XIcon className="h-3.5 w-3.5" />
                     </button>
@@ -118,7 +118,7 @@ export default function FileUploader({
                   )}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {error ? '失败' : done ? '完成' : `${progress}%`}
+                  {error ? 'Failed' : done ? '完成' : `${progress}%`}
                 </span>
               </li>
             )
@@ -127,7 +127,7 @@ export default function FileUploader({
       )}
 
       <p className="text-xs text-muted-foreground">
-        支持扩展名：{(extensions ?? ALL_EXTENSIONS).slice(0, 12).join(', ')}
+        Supported: 扩展名：{(extensions ?? ALL_EXTENSIONS).slice(0, 12).join(', ')}
         {(extensions ?? ALL_EXTENSIONS).length > 12 ? '…' : ''}
       </p>
     </div>

@@ -81,11 +81,11 @@ export default function ChatMessage({ message, onAskUserRespond }: ChatMessagePr
 
         {message.references && message.references.length > 0 && (
           <div className="mt-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-            <span>引用：</span>
+            <span>Sources:</span>
             {message.references.map((reference, index) => {
               const isWebRef = reference.reference_id?.startsWith('web_')
               const Icon = isWebRef ? GlobeIcon : PaperclipIcon
-              // 判断引用的链接：web 类型用 file_path，RAG 类型看 file_path 是否为 URL
+              // 判断引用的链接：web Type用 file_path，RAG Type看 file_path 是否为 URL
               const linkUrl = isWebRef
                 ? reference.file_path
                 : _isUrl(reference.file_path) ? reference.file_path : null

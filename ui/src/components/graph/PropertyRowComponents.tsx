@@ -2,7 +2,7 @@ interface PropertyNameProps {
   name: string
 }
 
-/** 属性名（只读，原样显示）。 */
+/** Properties名（只读，原样显示）。 */
 export const PropertyName = ({ name }: PropertyNameProps) => {
   return (
     <span className="text-primary/60 tracking-wide whitespace-nowrap">
@@ -17,7 +17,7 @@ interface PropertyValueProps {
   tooltip?: string
 }
 
-/** 属性值（只读，超长截断 + title 提示）。 */
+/** Properties值（只读，超长截断 + title 提示）。 */
 export const PropertyValue = ({ value, onClick, tooltip }: PropertyValueProps) => {
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2)
   return (
