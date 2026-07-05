@@ -53,7 +53,7 @@ export default function App() {
                 <div
                   {...resizerProps}
                   className="w-1 shrink-0 cursor-col-resize bg-border/40 transition-colors hover:bg-muted-foreground/40"
-                  aria-label="拖动调整宽度"
+                  aria-label="Drag to resize"
                   role="separator"
                 />
               )}

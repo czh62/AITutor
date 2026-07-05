@@ -10,8 +10,8 @@ interface SiteHeaderProps {
 }
 
 const TABS: { value: AppTab; label: string }[] = [
-  { value: 'qa', label: '知识问答' },
-  { value: 'knowledge-graph', label: '知识图谱' }
+  { value: 'qa', label: 'Knowledge Q&A' },
+  { value: 'knowledge-graph', label: 'Knowledge Graph' }
 ]
 
 export default function SiteHeader({ currentTab, onTabChange }: SiteHeaderProps) {

@@ -4,7 +4,7 @@ import { controlButtonVariant } from '@/lib/constants'
 import Button from '@/components/ui/Button'
 
 /**
- * 切换全屏模式。
+ * 切换Fullscreen模式。
  */
 const FullScreenControl = () => {
   const { isFullScreen, toggle } = useFullScreen()
@@ -12,11 +12,11 @@ const FullScreenControl = () => {
   return (
     <>
       {isFullScreen ? (
-        <Button variant={controlButtonVariant} onClick={toggle} tooltip="退出全屏" size="icon">
+        <Button variant={controlButtonVariant} onClick={toggle} tooltip="Exit Fullscreen" size="icon">
           <MinimizeIcon />
         </Button>
       ) : (
-        <Button variant={controlButtonVariant} onClick={toggle} tooltip="全屏" size="icon">
+        <Button variant={controlButtonVariant} onClick={toggle} tooltip="Fullscreen" size="icon">
           <MaximizeIcon />
         </Button>
       )}

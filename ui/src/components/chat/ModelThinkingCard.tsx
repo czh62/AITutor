@@ -32,7 +32,7 @@ export default function ModelThinkingCard({ content, closed }: ModelThinkingCard
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
         <ChevronDownIcon className="h-3 w-3 shrink-0 opacity-70 transition-transform group-open/think:rotate-180" />
         <BrainCircuitIcon className="h-3 w-3 shrink-0 opacity-80" />
-        <span>模型思考</span>
+        <span>Model Thinking</span>
         {!closed && <Loader2Icon className="ml-1 h-3 w-3 animate-spin opacity-70" />}
       </summary>
       <div className="border-t border-border/40 bg-background/50 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
@@ -41,7 +41,7 @@ export default function ModelThinkingCard({ content, closed }: ModelThinkingCard
             {content}
           </ReactMarkdown>
         ) : (
-          <div className="italic text-muted-foreground/70">思考中...</div>
+          <div className="italic text-muted-foreground/70">Thinking...</div>
         )}
       </div>
     </details>

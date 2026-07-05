@@ -68,7 +68,7 @@ export default function ChatComposer({
               onSend()
             }
           }}
-          placeholder="输入你的问题...（Enter 发送，Shift+Enter 换行）"
+          placeholder="Ask a question... (Enter to send, Shift+Enter for a new line)"
           rows={1}
           className="max-h-[200px] min-h-[44px] w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[16px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/50"
         />
@@ -77,7 +77,7 @@ export default function ChatComposer({
           <div className="relative flex items-center">
             <SlidersHorizontalIcon className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-muted-foreground" />
             <select
-              aria-label="查询模式"
+              aria-label="Query mode"
               value={queryMode}
               onChange={(event) => onQueryModeChange(event.target.value as QueryMode)}
               disabled={isStreaming}
@@ -100,7 +100,7 @@ export default function ChatComposer({
               className="h-3.5 w-3.5 rounded border-border accent-emerald-500"
             />
             <GlobeIcon className="h-3.5 w-3.5" />
-            <span className="text-xs font-medium">联网搜索</span>
+            <span className="text-xs font-medium">Web Search</span>
           </label>
 
           <button
@@ -110,7 +110,7 @@ export default function ChatComposer({
             className="flex cursor-pointer select-none items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
           >
             <BrainIcon className="h-3.5 w-3.5" />
-            <span className="text-xs font-medium">出题</span>
+            <span className="text-xs font-medium">Quiz</span>
           </button>
 
           <div className="ml-auto flex items-center gap-1.5">
@@ -119,8 +119,8 @@ export default function ChatComposer({
                 type="button"
                 onClick={onClear}
                 disabled={isStreaming}
-                aria-label="清空对话"
-                title="清空对话"
+                aria-label="Clear conversation"
+                title="Clear conversation"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-40"
               >
                 <EraserIcon className="h-4 w-4" />
@@ -130,8 +130,8 @@ export default function ChatComposer({
               <button
                 type="button"
                 onClick={onStop}
-                aria-label="停止生成"
-                title="停止生成"
+                aria-label="Stop generation"
+                title="Stop generation"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-emerald-500 text-white transition-transform hover:bg-emerald-600 active:scale-95"
               >
                 <SquareIcon className="h-3.5 w-3.5 fill-current" />
@@ -141,8 +141,8 @@ export default function ChatComposer({
                 type="button"
                 onClick={onSend}
                 disabled={!input.trim()}
-                aria-label="发送"
-                title="发送"
+                aria-label="Send"
+                title="Send"
                 className={cn(
                   'inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-emerald-500 text-white transition-transform hover:bg-emerald-600 active:scale-95',
                   !input.trim() && 'opacity-25 hover:bg-emerald-500'

@@ -33,11 +33,11 @@ export default function BuildStatusDialog({
     setRetrying(true)
     try {
       await buildMasteryDocument(document.doc_id)
-      toast.success('已重新触发知识树构建')
+      toast.success('Knowledge tree rebuild triggered')
       onChanged()
       onOpenChange(false)
     } catch (err) {
-      toast.error(`重试构建失败：${errorMessage(err)}`)
+      toast.error(`Failed to retry build: ${errorMessage(err)}`)
     } finally {
       setRetrying(false)
     }
@@ -49,18 +49,18 @@ export default function BuildStatusDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>知识树状态</DialogTitle>
-          <DialogDescription>{document?.title || '当前文档'} 的 RAG 与知识树构建状态</DialogDescription>
+          <DialogTitle>Knowledge Tree Status</DialogTitle>
+          <DialogDescription>{document?.title || 'Current Document'} RAG and knowledge tree build status</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="rounded-md bg-secondary p-3">
-              <p className="text-xs text-muted-foreground">RAG 状态</p>
+              <p className="text-xs text-muted-foreground">RAG Status</p>
               <p className="mt-1 font-medium text-foreground">{document?.rag_status || '-'}</p>
             </div>
             <div className="rounded-md bg-secondary p-3">
-              <p className="text-xs text-muted-foreground">知识树状态</p>
+              <p className="text-xs text-muted-foreground">Knowledge Tree Status</p>
               <p className="mt-1 font-medium text-foreground">{document?.build_status || '-'}</p>
             </div>
           </div>
@@ -76,7 +76,7 @@ export default function BuildStatusDialog({
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              关闭
+              Close
             </Button>
             <Button onClick={handleRetry} disabled={!canRetry || retrying}>
               {retrying ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <HammerIcon className="h-4 w-4" />}

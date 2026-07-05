@@ -5,7 +5,7 @@ import { controlButtonVariant } from '@/lib/constants'
 import { useSettingsStore } from '@/stores/settings'
 
 /**
- * 切换图例显示/隐藏。
+ * 切换Legend显示/隐藏。
  */
 const LegendButton = () => {
   const showLegend = useSettingsStore.use.showLegend()
@@ -19,7 +19,7 @@ const LegendButton = () => {
     <Button
       variant={controlButtonVariant}
       onClick={toggleLegend}
-      tooltip="图例"
+      tooltip="Legend"
       size="icon"
     >
       <BookOpenIcon />

@@ -60,7 +60,7 @@ const ZoomControl = () => {
       <Button
         variant={controlButtonVariant}
         onClick={handleRotate}
-        tooltip="顺时针旋转"
+        tooltip="Rotate clockwise"
         size="icon"
       >
         <RotateCwIcon />
@@ -68,7 +68,7 @@ const ZoomControl = () => {
       <Button
         variant={controlButtonVariant}
         onClick={handleRotateCounterClockwise}
-        tooltip="逆时针旋转"
+        tooltip="Rotate counterclockwise"
         size="icon"
       >
         <RotateCcwIcon />
@@ -76,15 +76,15 @@ const ZoomControl = () => {
       <Button
         variant={controlButtonVariant}
         onClick={handleResetZoom}
-        tooltip="重置缩放"
+        tooltip="Reset zoom"
         size="icon"
       >
         <FullscreenIcon />
       </Button>
-      <Button variant={controlButtonVariant} onClick={handleZoomIn} tooltip="放大" size="icon">
+      <Button variant={controlButtonVariant} onClick={handleZoomIn} tooltip="Zoom in" size="icon">
         <ZoomInIcon />
       </Button>
-      <Button variant={controlButtonVariant} onClick={handleZoomOut} tooltip="缩小" size="icon">
+      <Button variant={controlButtonVariant} onClick={handleZoomOut} tooltip="Zoom out" size="icon">
         <ZoomOutIcon />
       </Button>
     </>

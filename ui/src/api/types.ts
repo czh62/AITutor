@@ -1,11 +1,11 @@
 /**
- * 文档相关类型定义（对齐 LightRAG 真实 API 契约）。
+ * 文档相关Type定义（对齐 LightRAG 真实 API 契约）。
  *
  * 后端为 LightRAG（默认 http://localhost:9621），路由前缀 /documents。
  * 环境变量 VITE_USE_MOCK=true 时走前端 mock，否则直连 LightRAG。
  */
 
-/** 文档处理状态 */
+/** 文档ProcessingStatus */
 export type DocStatus =
   | 'processed'
   | 'preprocessed'
@@ -15,7 +15,7 @@ export type DocStatus =
   | 'pending'
   | 'failed'
 
-/** 单个文档的状态响应 */
+/** 单个文档的Status响应 */
 export interface DocStatusResponse {
   id: string
   file_path: string
@@ -41,7 +41,7 @@ export interface PaginationInfo {
 }
 
 /**
- * 分页查询请求（对齐 LightRAG POST /documents/paginated body）。
+ * 分页Query请求（对齐 LightRAG POST /documents/paginated body）。
  * LightRAG 用 status_filter（单值）或 status_filters（多值数组），
  * 不再用 not_status。
  */
@@ -54,50 +54,50 @@ export interface DocumentsRequest {
   sort_direction: 'asc' | 'desc'
 }
 
-/** 分页查询响应 */
+/** 分页Query响应 */
 export interface DocumentsPaginatedResponse {
   documents: DocStatusResponse[]
   pagination: PaginationInfo
   status_counts: Record<string, number>
 }
 
-/** 文档上传结果（对齐 LightRAG InsertResponse） */
+/** 文档UploadResult（对齐 LightRAG InsertResponse） */
 export interface UploadResult {
   status: 'success' | 'partial_success' | 'failure'
   message: string
   track_id?: string
 }
 
-/** 扫描/重试结果（对齐 LightRAG ScanResponse） */
+/** Scan / RetryResult（对齐 LightRAG ScanResponse） */
 export interface ScanResult {
   status: 'scanning_started' | 'scanning_skipped_pipeline_busy' | 'scanning_no_new_documents'
   message: string
 }
 
-/** 清空文档结果 */
+/** Clear DocumentsResult */
 export interface ClearDocumentsResult {
   status: 'success' | 'failure'
   message: string
 }
 
-/** 删除文档结果（对齐 LightRAG DeleteDocResponse） */
+/** Delete DocumentsResult（对齐 LightRAG DeleteDocResponse） */
 export interface DeleteDocumentsResult {
   status: 'success' | 'failure'
   message: string
 }
 
 /**
- * 流水线状态（对齐 LightRAG GET /documents/pipeline_status）。
+ * Pipeline Status（对齐 LightRAG GET /documents/pipeline_status）。
  * job_start 为 ISO 8601 字符串（不是毫秒时间戳）。
  */
 export interface PipelineStatus {
-  /** 是否已自动扫描 */
+  /** 是否已Auto扫描 */
   autoscanned: boolean
   /** 流水线是否正忙 */
   busy: boolean
-  /** 当前任务名 */
+  /** 当前Task名 */
   job_name: string
-  /** 任务开始时间（ISO 8601，无任务时为空字符串） */
+  /** Task开始时间（ISO 8601，无Task时为空字符串） */
   job_start?: string
   /** 文档总数 */
   docs: number
@@ -105,19 +105,19 @@ export interface PipelineStatus {
   batchs: number
   /** 当前批次 */
   cur_batch: number
-  /** 是否有待处理的请求 */
+  /** 是否有待Processing的请求 */
   request_pending: boolean
-  /** 是否已请求取消 */
+  /** 是否已请求Cancel */
   cancellation_requested?: boolean
   /** 最近一条消息 */
   latest_message: string
   /** 流水线历史日志 */
   history_messages?: string[]
-  /** 更新状态详情 */
+  /** 更新Status详情 */
   update_status?: Record<string, unknown>
 }
 
-/** 取消流水线结果 */
+/** Cancel PipelineResult */
 export interface CancelPipelineResult {
   status: 'cancellation_requested' | 'not_busy'
   message?: string
@@ -134,22 +134,22 @@ export interface HealthStatus {
   message?: string
 }
 
-/** 流水线状态过滤桶（前端用） */
+/** Pipeline Status过滤桶（前端用） */
 export type StatusBucket = 'completed' | 'parse' | 'analyze' | 'process' | 'failed'
 export type StatusFilter = 'all' | StatusBucket
 
 // ============================================================
-//  知识图谱（对齐后端 src/schemas/graph.py 与 LightRAG GET /graphs）
+//  Knowledge Graph（对齐后端 src/schemas/graph.py 与 LightRAG GET /graphs）
 // ============================================================
 
-/** 图谱节点（对齐后端 GraphNode） */
+/** 图谱Nodes（对齐后端 GraphNode） */
 export interface GraphNode {
   id: string
   labels: string[]
   properties: Record<string, unknown>
 }
 
-/** 图谱边（对齐后端 GraphEdge） */
+/** 图谱Edges（对齐后端 GraphEdge） */
 export interface GraphEdge {
   id: string
   source: string
@@ -165,7 +165,7 @@ export interface GraphData {
 }
 
 // ============================================================
-//  知识点学习路径（对齐后端 src/schemas/mastery.py）
+//  Knowledge PointsLearning Path（对齐后端 src/schemas/mastery.py）
 // ============================================================
 
 export type MasteryBuildStatus =
@@ -307,18 +307,18 @@ export interface MasteryAssessResponse {
 }
 
 // ============================================================
-//  知识问答（对齐后端 src/schemas/query.py 与 LightRAG POST /query[/stream]）
+//  Knowledge Q&A（对齐后端 src/schemas/query.py 与 LightRAG POST /query[/stream]）
 // ============================================================
 
-/** 查询模式（对齐 LightRAG QueryParam.mode） */
+/** Query mode（对齐 LightRAG QueryParam.mode） */
 export type QueryMode = 'naive' | 'local' | 'global' | 'hybrid' | 'mix' | 'bypass'
 
-/** 查询请求（前端发 query/mode/stream/force_web_search/session_id） */
+/** Query请求（前端发 query/mode/stream/force_web_search/session_id） */
 export interface QueryRequest {
   query: string
   mode: QueryMode
   stream?: boolean
-  force_web_search?: boolean  // 用户手动勾选联网搜索
+  force_web_search?: boolean  // 用户手动勾SelectWeb Search
   session_id?: string         // ask_user 暂停恢复用会话标识
 }
 
@@ -329,7 +329,7 @@ export interface ReferenceItem {
   content?: unknown[]
 }
 
-/** 联网搜索引用项 */
+/** Web Search引用项 */
 export interface SearchCitation {
   id: number
   url: string
@@ -337,7 +337,7 @@ export interface SearchCitation {
   snippet: string
 }
 
-/** 工具来源项（对齐后端 SourceItem，区分 rag/web） */
+/** Tool来源项（对齐后端 SourceItem，区分 rag/web） */
 export interface SourceItem {
   id: string
   content: string
@@ -345,7 +345,7 @@ export interface SourceItem {
   type: 'rag' | 'web'
 }
 
-/** ask_user 单个问题 */
+/** ask_user 单个Question */
 export interface AskUserQuestion {
   id: string
   text: string
@@ -358,20 +358,20 @@ export interface AskUserPayload {
   context: string
 }
 
-/** 工具调用信息（tool_call 事件） */
+/** Tool调用信息（tool_call 事件） */
 export interface ToolCallInfo {
   id: string
   name: 'rag' | 'web_search' | 'ask_user' | string
   arguments: Record<string, unknown>
 }
 
-/** 工具结果信息（tool_result 事件） */
+/** ToolResult信息（tool_result 事件） */
 export interface ToolResultInfo {
   tool_call_id: string
   name: string
   content: string
   sources_count?: number
-  ask_user?: AskUserPayload  // ask_user 工具的结果带此字段
+  ask_user?: AskUserPayload  // ask_user Tool的Result带此字段
   paused?: boolean
 }
 
@@ -385,16 +385,16 @@ export interface ChatMessage {
   isStreaming?: boolean
   // 原始事件流，供 TracePanels 按 call_id 分组渲染思维链
   traceEvents?: StreamEvent[]
-  // 旧格式，向后兼容保留（有 traceEvents 时优先使用 traceEvents）
+  // 旧格式，向后兼容保留（有 traceEvents 时优先Uses traceEvents）
   loopTrace?: LoopTrace
-  // ask_user 暂停态：loop 等待用户回复
+  // ask_user 暂停态：loop 等待用户Reply
   askUserPayload?: AskUserPayload
   isWaitingForInput?: boolean
-  // 出题结果：出题流程产出的题目列表
+  // QuizResult：Quiz流程产出的题目列表
   quizQuestions?: QuizQuestion[]
-  // 作答状态：题号 → 用户的作答（选择/输入）
+  // 作答Status：题号 → 用户的作答（Select择/输入）
   quizAnswers?: Record<number, QuizAnswerState>
-  // AI 判词状态：题号 → 判题结果
+  // AI 判词Status：题号 → 判题Result
   quizJudgments?: Record<number, QuizJudgmentState>
 }
 
@@ -426,18 +426,18 @@ export interface LoopTrace {
 /** AgentLoop 单轮步骤 */
 export interface LoopStep {
   round: number
-  query: string                // 本轮使用的查询（可能是改写后的）
-  originalQuery: string        // 原始用户查询
-  thinking: string             // 评估思考
+  query: string                // 本轮Uses的Query（可能是改写后的）
+  originalQuery: string        // 原始用户Query
+  thinking: string             // EvaluationThinking
   quality: string              // sufficient / insufficient / forced / short_query
-  rewrittenQuery?: string      // 如果 insufficient，建议的改写查询
-  contextSummary: string       // 本轮检索到的上下文摘要
-  needWebSearch?: boolean      // LLM 评估是否需要联网搜索
-  webSearchQuery?: string      // 联网搜索使用的查询
-  webSearchResults?: SearchCitation[]  // 联网搜索结果摘要
+  rewrittenQuery?: string      // 如果 insufficient，建议的改写Query
+  contextSummary: string       // 本轮Retrieval到的上下文摘要
+  needWebSearch?: boolean      // LLM Evaluation是否需要Web Search
+  webSearchQuery?: string      // Web SearchUses的Query
+  webSearchResults?: SearchCitation[]  // Web SearchResult摘要
 }
 
-/** AgentLoop NDJSON 流式事件类型 */
+/** AgentLoop NDJSON 流式事件Type */
 export type LoopEventType =
   | 'stage_start' | 'stage_end' | 'thinking' | 'query_rewrite'
   | 'observation' | 'progress' | 'content'
@@ -450,29 +450,29 @@ export interface StreamEvent {
   type: LoopEventType
   round: number
   content: string
-  metadata: Record<string, unknown>  // 包含 call_id, call_kind, call_role 等门控标记
-  timestamp?: number                 // 可选时间戳（后端未提供时由前端补充）
+  metadata: Record<string, unknown>  // Includes call_id, call_kind, call_role 等门控标记
+  timestamp?: number                 // 可Select时间戳（后端未提供时由前端补充）
 }
 
-/** 旧版事件类型别名，向后兼容 */
+/** 旧版事件Type别名，向后兼容 */
 export type LoopEvent = StreamEvent
 
 // ============================================================
-//  出题（对齐后端 src/schemas/quiz.py 与 QuizService NDJSON 流）
+//  Quiz（对齐后端 src/schemas/quiz.py 与 QuizService NDJSON 流）
 // ============================================================
 
-/** 题型分类（对齐后端 QuestionType） */
+/** Question TypesClassification（对齐后端 QuestionType） */
 export type QuizQuestionType = 'choice' | 'concept' | 'fill_in_blank' | 'short_answer' | 'written' | 'coding'
 
-/** 出题难度 */
+/** QuizDifficulty */
 export type QuizDifficulty = 'easy' | 'medium' | 'hard' | 'auto'
 
-/** 出题请求体 */
+/** Quiz请求体 */
 export interface QuizGenerateRequest {
   topic: string
   num_questions: number
   difficulty: QuizDifficulty
-  question_types: QuizQuestionType[]  // 空=任意题型
+  question_types: QuizQuestionType[]  // 空=任意Question Types
 }
 
 /** 单道题目（对齐后端 QuizQuestion） */
@@ -487,65 +487,65 @@ export interface QuizQuestion {
   difficulty: string
 }
 
-/** 题型下拉选项（中文标签） */
+/** Question Types下拉Select项（中文Labels） */
 export const QUIZ_QUESTION_TYPE_OPTIONS: { value: QuizQuestionType; label: string }[] = [
-  { value: 'choice', label: '选择题' },
-  { value: 'concept', label: '判断题' },
-  { value: 'fill_in_blank', label: '填空题' },
-  { value: 'short_answer', label: '简答题' },
-  { value: 'written', label: '论述题' },
-  { value: 'coding', label: '编程题' },
+  { value: 'choice', label: 'Multiple Choice' },
+  { value: 'concept', label: 'True / False' },
+  { value: 'fill_in_blank', label: 'Fill in the Blank' },
+  { value: 'short_answer', label: 'Short Answer' },
+  { value: 'written', label: 'Essay' },
+  { value: 'coding', label: 'Coding' },
 ]
 
-/** 题型中文标签映射 */
+/** Question Types中文Labels映射 */
 export const QUIZ_TYPE_LABELS: Record<QuizQuestionType, string> = {
-  choice: '选择题',
-  concept: '判断题',
-  fill_in_blank: '填空题',
-  short_answer: '简答题',
-  written: '论述题',
-  coding: '编程题',
+  choice: 'Multiple Choice',
+  concept: 'True / False',
+  fill_in_blank: 'Fill in the Blank',
+  short_answer: 'Short Answer',
+  written: 'Essay',
+  coding: 'Coding',
 }
 
-/** 难度下拉选项 */
+/** Difficulty下拉Select项 */
 export const QUIZ_DIFFICULTY_OPTIONS: { value: QuizDifficulty; label: string }[] = [
-  { value: 'auto', label: '自动' },
-  { value: 'easy', label: '简单' },
-  { value: 'medium', label: '中等' },
-  { value: 'hard', label: '困难' },
+  { value: 'auto', label: 'Auto' },
+  { value: 'easy', label: 'Easy' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'hard', label: 'Hard' },
 ]
 
-/** Query Mode 下拉选项（默认 mix） */
+/** Query Mode 下拉Select项（默认 mix） */
 export const QUERY_MODE_OPTIONS: { value: QueryMode; label: string }[] = [
-  { value: 'mix', label: 'Mix（混合）' },
-  { value: 'local', label: 'Local（局部）' },
-  { value: 'global', label: 'Global（全局）' },
-  { value: 'hybrid', label: 'Hybrid（混合检索）' },
-  { value: 'naive', label: 'Naive（朴素）' },
-  { value: 'bypass', label: 'Bypass（旁路）' }
+  { value: 'mix', label: 'Mix' },
+  { value: 'local', label: 'Local' },
+  { value: 'global', label: 'Global' },
+  { value: 'hybrid', label: 'Hybrid' },
+  { value: 'naive', label: 'Naive' },
+  { value: 'bypass', label: 'Bypass' }
 ]
 
 // ============================================================
 //  作答 + 判题 + 追问（新增）
 // ============================================================
 
-/** 单题作答状态 */
+/** 单题作答Status */
 export interface QuizAnswerState {
-  /** 选择题/判断题：选中的选项键（A/B/C/D 或 "true"/"false"） */
+  /** Multiple Choice/True / False：Select中的Select项键（A/B/C/D 或 "true"/"false"） */
   selected: string | null
-  /** 填空题/主观题：输入的文字 */
+  /** Fill in the Blank/主观题：输入的文字 */
   typed: string
   /** 是否已提交 */
   submitted: boolean
 }
 
-/** 单题 AI 判词状态 */
+/** 单题 AI 判词Status */
 export interface QuizJudgmentState {
   /** 判词全文（流式追加） */
   text: string
   /** 是否正在流式接收 */
   isStreaming: boolean
-  /** 错误信息 */
+  /** Incorrect信息 */
   error: string | null
 }
 
@@ -560,7 +560,7 @@ export interface QuizJudgeRequest {
   language: string
 }
 
-/** 追问讲解请求体（对齐后端 QuizFollowupRequest） */
+/** Ask Follow-up请求体（对齐后端 QuizFollowupRequest） */
 export interface QuizFollowupRequest {
   followup_question: string
   question: string

@@ -1,6 +1,6 @@
 import type { DocStatus, StatusBucket, StatusFilter } from '@/api/types'
 
-/** 把后端原始状态归入前端的过滤桶 */
+/** 把后端原始Status归入前端的过滤桶 */
 export function getStatusBucket(status: DocStatus): StatusBucket | null {
   switch (status) {
     case 'processed':
@@ -20,13 +20,13 @@ export function getStatusBucket(status: DocStatus): StatusBucket | null {
   }
 }
 
-/** 判断某文档状态是否匹配当前过滤桶 */
+/** 判断某文档Status是否匹配当前过滤桶 */
 export function matchesStatusFilter(status: DocStatus, filter: StatusFilter): boolean {
   if (filter === 'all') return true
   return getStatusBucket(status) === filter
 }
 
-/** 过滤桶 -> LightRAG status_filters（数组，一个桶映射多个真实状态） */
+/** 过滤桶 -> LightRAG status_filters（数组，一个桶映射多个真实Status） */
 export function getStatusRequestFilters(filter: StatusFilter): {
   status_filter?: DocStatus
   status_filters?: DocStatus[]
@@ -47,18 +47,18 @@ export function getStatusRequestFilters(filter: StatusFilter): {
   }
 }
 
-/** 状态显示文本 */
+/** Status显示文本 */
 export const STATUS_LABELS: Record<DocStatus, string> = {
-  processed: '已完成',
-  preprocessed: '预处理',
-  parsing: '内容提取',
-  analyzing: '分析中',
-  processing: '处理中',
-  pending: '等待中',
-  failed: '失败'
+  processed: 'Completed',
+  preprocessed: 'Preprocessing',
+  parsing: 'Extracting',
+  analyzing: 'Analyzing',
+  processing: 'Processing',
+  pending: 'Pending',
+  failed: 'Failed'
 }
 
-/** 状态显示颜色 */
+/** Status显示颜色 */
 export const STATUS_COLORS: Record<DocStatus, string> = {
   processed: 'text-green-600',
   preprocessed: 'text-purple-600',

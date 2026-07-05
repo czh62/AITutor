@@ -3,17 +3,17 @@ import { searchResultLimit } from '@/lib/constants'
 import { useGraphStore } from '@/stores/graph'
 import MiniSearch from 'minisearch'
 
-// 搜索结果中的消息项标识
+// Search Results中的消息项标识
 export const messageId = '__message_item'
 
-// 搜索结果选项
+// Search ResultsSelect项
 export interface OptionItem {
   id: string
   type: 'nodes' | 'edges' | 'message'
   message?: string
 }
 
-// GraphViewer 使用的搜索选项类型
+// GraphViewer Uses的搜索Select项Type
 export type GraphSearchOption = OptionItem | null
 
 interface GraphSearchProps {
@@ -58,8 +58,8 @@ function OptionComponent(item: OptionItem) {
 }
 
 /**
- * 节点搜索输入框：基于 MiniSearch 全文索引，支持前缀/模糊匹配与中间内容匹配。
- * 自包含实现（不依赖 @react-sigma/graph-search / AsyncSearch）。
+ * Nodes搜索输入框：基于 MiniSearch 全文索引，Supported: 前缀/模糊匹配与中间内容匹配。
+ * 自Includes实现（不Depends On @react-sigma/graph-search / AsyncSearch）。
  */
 const GraphSearch: FC<GraphSearchProps> = ({ value, onChange, onFocus }) => {
   const graph = useGraphStore.use.sigmaGraph()
@@ -69,7 +69,7 @@ const GraphSearch: FC<GraphSearchProps> = ({ value, onChange, onFocus }) => {
   const [options, setOptions] = useState<OptionItem[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // 图谱变化时重置搜索索引
+  // 图谱变化时Reset搜索索引
   useEffect(() => {
     if (graph) {
       useGraphStore.getState().resetSearchEngine()
@@ -128,7 +128,7 @@ const GraphSearch: FC<GraphSearchProps> = ({ value, onChange, onFocus }) => {
         .filter((r: { id: string }) => graph.hasNode(r.id))
         .map((r: { id: string }) => ({ id: r.id, type: 'nodes' as const }))
 
-      // 结果较少时补充中间内容匹配
+      // Result较少时补充中间内容匹配
       if (result.length < 5) {
         const matchedIds = new Set(result.map((item) => item.id))
         const middleMatches = graph
@@ -155,14 +155,14 @@ const GraphSearch: FC<GraphSearchProps> = ({ value, onChange, onFocus }) => {
             {
               type: 'message',
               id: messageId,
-              message: `还有 ${result.length - searchResultLimit} 个结果未显示`
+              message: `${result.length - searchResultLimit} more results are hidden`
             }
           ]
     },
     [graph, searchEngine, onFocus]
   )
 
-  // 输入变化时刷新选项
+  // 输入变化时刷新Select项
   useEffect(() => {
     let active = true
     loadOptions(query).then((opts) => {
@@ -173,7 +173,7 @@ const GraphSearch: FC<GraphSearchProps> = ({ value, onChange, onFocus }) => {
     }
   }, [query, loadOptions])
 
-  // 点击外部关闭下拉
+  // 点击外部Close下拉
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -196,9 +196,9 @@ const GraphSearch: FC<GraphSearchProps> = ({ value, onChange, onFocus }) => {
     <div ref={containerRef} className="relative">
       <input
         className="bg-background/60 w-40 rounded-xl border px-3 py-1.5 text-sm opacity-60 backdrop-blur-lg transition-all hover:w-56 hover:opacity-100 focus:w-56 focus:opacity-100 focus:outline-none"
-        placeholder="搜索节点..."
+        placeholder="Search nodes..."
         value={open ? query : displayValue}
-        aria-label="搜索节点"
+        aria-label="Search nodes"
         onFocus={() => {
           setOpen(true)
           setQuery('')
@@ -208,7 +208,7 @@ const GraphSearch: FC<GraphSearchProps> = ({ value, onChange, onFocus }) => {
       {open && (
         <div className="bg-background absolute top-full left-0 z-20 mt-1 max-h-80 w-56 overflow-auto rounded-md border shadow-md">
           {options.length === 0 ? (
-            <div className="p-3 text-center text-sm text-gray-500">无匹配节点</div>
+            <div className="p-3 text-center text-sm text-gray-500">No matching nodes</div>
           ) : (
             options.map((item) => (
               <div

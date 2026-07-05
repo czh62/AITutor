@@ -49,38 +49,38 @@ export default function ClearDocumentsDialog({
     if (confirm !== 'yes') return
     setBusy(true)
     try {
-      // 清空文档（DELETE /documents）
+      // Clear Documents（DELETE /documents）
       const clearResult = await clearDocuments()
       if (clearResult.status !== 'success') {
-        throw new Error(clearResult.message || '清空文档失败')
+        throw new Error(clearResult.message || 'Clear DocumentsFailed')
       }
-      // 清空 LLM 缓存（独立接口 POST /documents/clear_cache）
+      // Clear LLM Cache（独立接口 POST /documents/clear_cache）
       if (clearCacheOption) {
         try {
           await clearCache()
-          toast.success('缓存清空成功')
+          toast.success('Cache cleared successfully')
         } catch (cacheErr) {
           const message = errorMessage(cacheErr)
-          console.warn(`清空缓存失败：${message}`)
+          console.warn(`Clear缓存Failed：${message}`)
         }
       }
       const verification = await onDocumentsCleared?.()
       const remainingCount = verification?.remainingCount ?? 0
       const processingCount = verification?.processingCount ?? 0
       if (remainingCount === 0 && verification?.masteryResetFailed) {
-        toast.warning('文档已清除，但知识点状态刷新失败，请稍后重试。')
+        toast.warning('Documents were cleared, but knowledge point state failed to refresh. Please try again later.')
       } else if (remainingCount === 0) {
-        toast.success('文档清空成功')
+        toast.success('Documents cleared successfully')
       } else if (processingCount > 0) {
-        toast.warning('部分文档仍在处理中，暂时无法清除。')
+        toast.warning('Some documents are still processing and cannot be cleared yet.')
       } else {
-        toast.warning('清除请求已发送，但仍有文档残留，请稍后刷新确认。')
+        toast.warning('Clear request sent, but some documents remain. Please refresh and check again later.')
       }
       setOpen(false)
       setConfirm('')
       setClearCacheOption(false)
     } catch (err) {
-      toast.error(`清空文档失败：${errorMessage(err)}`)
+      toast.error(`Failed to clear documents: ${errorMessage(err)}`)
     } finally {
       setBusy(false)
     }
@@ -95,18 +95,18 @@ export default function ClearDocumentsDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>清空文档</DialogTitle>
-          <DialogDescription>此操作将从系统中移除所有文档</DialogDescription>
+          <DialogTitle>Clear Documents</DialogTitle>
+          <DialogDescription>This action will remove all documents from the system.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <p className="font-medium text-red-600">
-            警告：此操作将永久删除所有文档，无法恢复！
+            Warning: this action will permanently delete all documents and cannot be undone.
           </p>
-          <p>确定要清空所有文档吗？请输入 yes 确认操作</p>
+          <p>Clear all documents? Type yes to confirm.</p>
           <input
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            placeholder="输入 yes 确认"
+            placeholder="Type yes to confirm"
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           />
           <label className="flex items-center gap-2">
@@ -115,12 +115,12 @@ export default function ClearDocumentsDialog({
               checked={clearCacheOption}
               onChange={(e) => setClearCacheOption(e.target.checked)}
             />
-            清空 LLM 缓存
+            Clear LLM Cache
           </label>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
-            取消
+            Cancel
           </Button>
           <Button
             variant="destructive"

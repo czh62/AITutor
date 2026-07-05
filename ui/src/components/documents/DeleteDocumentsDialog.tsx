@@ -34,12 +34,12 @@ export default function DeleteDocumentsDialog({
     setBusy(true)
     try {
       await deleteDocuments(selectedDocIds, deleteFile, deleteCache)
-      toast.success('文档删除流水线启动成功')
+      toast.success('Document delete pipeline started')
       setOpen(false)
       setConfirm('')
       await onDocumentsDeleted?.()
     } catch (err) {
-      toast.error(`删除文档失败：${errorMessage(err)}`)
+      toast.error(`Failed to delete documents: ${errorMessage(err)}`)
     } finally {
       setBusy(false)
     }
@@ -54,24 +54,24 @@ export default function DeleteDocumentsDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" title="删除选中的文档">
-          <Trash2Icon /> 删除 ({selectedDocIds.length})
+        <Button variant="outline" size="sm" title="Delete selected documents">
+          <Trash2Icon /> Delete ({selectedDocIds.length})
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>删除文档</DialogTitle>
-          <DialogDescription>此操作将永久删除选中的文档</DialogDescription>
+          <DialogTitle>Delete Documents</DialogTitle>
+          <DialogDescription>This action will permanently delete the selected documents.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <p className="font-medium text-red-600">
-            警告：此操作将永久删除选中的文档，无法恢复！
+            警告：This action will permanently delete the selected documents.，无法恢复！
           </p>
-          <p>确定要删除 {selectedDocIds.length} 个选中的文档吗？请输入 yes 确认操作</p>
+          <p>Delete {selectedDocIds.length} selected documents? Type yes to confirm.</p>
           <input
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            placeholder="输入 yes 确认"
+            placeholder="Type yes to confirm"
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           />
           <label className="flex items-center gap-2">
@@ -80,7 +80,7 @@ export default function DeleteDocumentsDialog({
               checked={deleteFile}
               onChange={(e) => setDeleteFile(e.target.checked)}
             />
-            同时删除上传文件
+            同时DeleteUpload文件
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -88,19 +88,19 @@ export default function DeleteDocumentsDialog({
               checked={deleteCache}
               onChange={(e) => setDeleteCache(e.target.checked)}
             />
-            同时删除实体关系抽取 LLM 缓存
+            同时Delete实体Relations抽取 LLM 缓存
           </label>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
-            取消
+            Cancel
           </Button>
           <Button
             variant="destructive"
             onClick={handleDelete}
             disabled={confirm !== 'yes' || busy}
           >
-            {busy ? '删除中...' : '确定'}
+            {busy ? 'Delete中...' : '确定'}
           </Button>
         </DialogFooter>
       </DialogContent>
