@@ -16,6 +16,7 @@ interface ClearDocumentsVerification {
   remainingCount: number
   processingCount: number
   statusCounts: Record<string, number>
+  masteryResetFailed?: boolean
 }
 
 interface ClearDocumentsDialogProps {
@@ -66,7 +67,9 @@ export default function ClearDocumentsDialog({
       const verification = await onDocumentsCleared?.()
       const remainingCount = verification?.remainingCount ?? 0
       const processingCount = verification?.processingCount ?? 0
-      if (remainingCount === 0) {
+      if (remainingCount === 0 && verification?.masteryResetFailed) {
+        toast.warning('文档已清除，但知识点状态刷新失败，请稍后重试。')
+      } else if (remainingCount === 0) {
         toast.success('文档清空成功')
       } else if (processingCount > 0) {
         toast.warning('部分文档仍在处理中，暂时无法清除。')

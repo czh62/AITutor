@@ -945,6 +945,18 @@ export async function deleteMasteryDocument(docId: string): Promise<{ status: 's
   return resp.data
 }
 
+export async function clearMasteryDocuments(): Promise<{ status: 'success'; deletedCount: number }> {
+  if (USE_MOCK) {
+    await delay(180)
+    const deletedCount = mockMasteryDocuments.length
+    mockMasteryDocuments = []
+    return { status: 'success', deletedCount }
+  }
+  const { documents } = await getMasteryDocuments()
+  await Promise.all(documents.map((doc) => deleteMasteryDocument(doc.doc_id)))
+  return { status: 'success', deletedCount: documents.length }
+}
+
 const mockNextStep: MasteryNextStep = {
   action: 'practice',
   module_id: 'mock_m1',
