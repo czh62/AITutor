@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from ..core.prompting import DEMO_RESPONSE_LANGUAGE_RULE
+
 # ── AI 判题 ──────────────────────────────────────────────
 
 JUDGE_SYSTEM_PROMPT_ZH = (
@@ -15,7 +17,7 @@ JUDGE_SYSTEM_PROMPT_ZH = (
     "- 然后分条列出：哪里做对了、哪里出错或缺漏、应该如何改正。\n"
     "- 若题目本身有多种合理答案，请承认学习者的合理之处。\n"
     "- 直接以学习者的作答为对象，不要泛泛而谈。\n"
-    "- 全程使用中文。"
+    f"- {DEMO_RESPONSE_LANGUAGE_RULE}"
 )
 
 JUDGE_SYSTEM_PROMPT_EN = (
@@ -27,7 +29,7 @@ JUDGE_SYSTEM_PROMPT_EN = (
     "- Then list: what the learner got right, what is wrong or missing, and how to fix it.\n"
     "- If multiple reasonable answers exist, acknowledge what the learner did well.\n"
     "- Speak directly to the learner's submission — do not give a generic lecture.\n"
-    "- Reply in English."
+    f"- {DEMO_RESPONSE_LANGUAGE_RULE}"
 )
 
 
@@ -95,7 +97,7 @@ FOLLOWUP_SYSTEM_PROMPT_ZH = (
     "- 若学习者对参考答案有疑问，解释为什么该答案是正确的（或部分正确/错误的）。\n"
     "- 适当拓展相关知识点，帮助学习者建立更深层的理解，但不要偏离主题。\n"
     "- 语言简洁清晰，避免冗长堆砌。\n"
-    "- 全程使用中文。"
+    f"- {DEMO_RESPONSE_LANGUAGE_RULE}"
 )
 
 FOLLOWUP_SYSTEM_PROMPT_EN = (
@@ -109,7 +111,7 @@ FOLLOWUP_SYSTEM_PROMPT_EN = (
     "correct/incorrect).\n"
     "- Expand on related knowledge points to deepen understanding, but stay on-topic.\n"
     "- Be concise and clear, avoid lengthy exposition.\n"
-    "- Reply in English."
+    f"- {DEMO_RESPONSE_LANGUAGE_RULE}"
 )
 
 

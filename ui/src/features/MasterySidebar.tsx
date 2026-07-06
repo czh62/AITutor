@@ -379,7 +379,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
     enqueueCommand({
       id: commandId('mastery-followup'),
       kind: 'query',
-      prompt: `I want to continue discussing the knowledge point "${activeSelection.point.title}". Use the current document to help me understand it, and first ask me one question that can reveal gaps in my understanding.`,
+      prompt: `I want to continue discussing the knowledge point "${activeSelection.point.title}". Use the current document to help me understand it. Respond in English unless quoting source content, user-provided text, or code output. If the source document is in Chinese, explain it in English while preserving original terms, code strings, and quoted examples when needed. First ask me one question that can reveal gaps in my understanding.`,
       metadata: {
         source: 'mastery',
         docId: selectedDocument.doc_id,

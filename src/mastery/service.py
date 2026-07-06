@@ -6,6 +6,7 @@ import time
 import uuid
 
 from ..core.config import get_settings
+from ..core.prompting import DEMO_RESPONSE_LANGUAGE_RULE
 from .builder import MasteryBuilder
 from .extractors import extract_document_text
 from .grading import classify_error, grade_answer
@@ -220,7 +221,7 @@ class MasteryService:
             "knowledge_point_id": kp.id,
             "title": kp.name,
             "description": kp.description,
-            "explanation": kp.description or f"请围绕「{kp.name}」进行学习。",
+            "explanation": kp.description or f"Study the knowledge point \"{kp.name}\".",
             "dependencies": kp.dependencies,
         }
 
@@ -231,7 +232,7 @@ class MasteryService:
             from ..core.exceptions import NotFoundError
 
             raise NotFoundError("Knowledge point not found")
-        prompt = f"请回答：{kp.name} 的核心内容是什么？"
+        prompt = f"Answer this learning check: What is the core idea of \"{kp.name}\"?"
         expected = kp.description or kp.name
         pending = PendingQuestion(
             question_id=f"q_{uuid.uuid4().hex[:12]}",
@@ -412,20 +413,21 @@ class MasteryService:
         kp: KnowledgePoint,
         dependency_titles: list[str],
     ) -> str:
-        dependencies = "、".join(dependency_titles) if dependency_titles else "无明确前置依赖"
+        dependencies = ", ".join(dependency_titles) if dependency_titles else "No explicit prerequisites"
         return (
-            f"请作为 AI Tutor，围绕当前文档中的知识点「{kp.name}」带我学习。\n\n"
-            "上下文：\n"
-            f"- 文档：{progress.title or progress.source_file or progress.doc_id}\n"
-            f"- 模块：{module_name or kp.module_id}\n"
-            f"- 知识点描述：{kp.description or '暂无描述'}\n"
-            f"- 前置依赖：{dependencies}\n\n"
-            "要求：\n"
-            "1. 先用直观语言解释它是什么；\n"
-            "2. 说明它依赖哪些前置知识；\n"
-            "3. 结合文档内容给一个例子；\n"
-            "4. 最后问我一个理解检查问题；\n"
-            "5. 如果我的背景或目标不清楚，使用 ask_user 追问后再继续。"
+            f"Act as EduMind AI and help the learner study the current knowledge point: \"{kp.name}\".\n\n"
+            f"{DEMO_RESPONSE_LANGUAGE_RULE}\n\n"
+            "Context:\n"
+            f"- Document: {progress.title or progress.source_file or progress.doc_id}\n"
+            f"- Module: {module_name or kp.module_id}\n"
+            f"- Knowledge point description: {kp.description or 'No description available'}\n"
+            f"- Prerequisites: {dependencies}\n\n"
+            "Requirements:\n"
+            "1. Explain what this knowledge point means in intuitive language.\n"
+            "2. Explain which prerequisite ideas it depends on.\n"
+            "3. Give one example grounded in the document content.\n"
+            "4. End with one understanding-check question for the learner.\n"
+            "5. If the learner's background or goal is unclear, use ask_user to clarify before continuing."
         )
 
     def _require_progress(self, doc_id: str) -> LearningProgress:

@@ -149,7 +149,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
           correct_answer: q.correct_answer,
           explanation: q.explanation,
           user_answer: getUserAnswer(q, ans),
-          language: 'zh',
+          language: 'en',
         },
         {
           // 从 store 实时读取最新Status，避免 stale closure
@@ -229,7 +229,7 @@ export default function QuizViewer({ questions, messageId }: QuizViewerProps) {
           explanation: q.explanation,
           user_answer: getUserAnswer(q, ans),
           ai_judgment: judgment.text || null,
-          language: 'zh',
+          language: 'en',
         },
         {
           onChunk: (text) => {

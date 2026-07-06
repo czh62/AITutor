@@ -4,10 +4,18 @@ import json
 import re
 from typing import Any
 
+from ..core.prompting import DEMO_RESPONSE_LANGUAGE_RULE
 from .models import KnowledgePoint, KnowledgeType, LearningModule, LearningProgress
 
 SYSTEM_PROMPT = """你是学习路线设计器。请根据完整文档构建覆盖全面、依赖清晰的知识树。
+输出内容语言规则：
+{demo_response_language_rule}
 只输出 JSON，不要输出解释。知识点 type 只能是 memory、concept、procedure、design。"""
+
+SYSTEM_PROMPT = SYSTEM_PROMPT.replace(
+    "{demo_response_language_rule}",
+    DEMO_RESPONSE_LANGUAGE_RULE,
+)
 
 USER_TEMPLATE = """请为以下文档构建 Mastery Path 知识树。
 
