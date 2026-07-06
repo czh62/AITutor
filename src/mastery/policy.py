@@ -203,6 +203,7 @@ def map_summary(progress: LearningProgress, *, now: float | None = None) -> dict
                     "mastery": round(display_mastery(progress, kp), 3),
                     "description": kp.description,
                     "dependencies": kp.dependencies,
+                    "review_later_at": progress.review_later_points.get(kp.id),
                 }
             )
         modules.append(
