@@ -220,6 +220,7 @@ export interface MasteryKnowledgePoint {
   mastery?: number
   dependencies: string[]
   review_due?: string | null
+  review_later_at?: number | string | null
   has_pending_question: boolean
 }
 

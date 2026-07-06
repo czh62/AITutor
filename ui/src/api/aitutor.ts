@@ -112,6 +112,7 @@ type RawMasteryDetail = RawMasterySummary & {
         description?: string
         dependencies?: string[]
         review_due?: string | null
+        review_later_at?: number | string | null
         has_pending_question?: boolean
       }>
     }>
@@ -195,6 +196,7 @@ function normalizeModules(raw: RawMasteryDetail): MasteryModule[] {
       mastery: point.mastery ?? (point.mastery_level ?? 0) / 100,
       dependencies: point.dependencies ?? [],
       review_due: point.review_due ?? null,
+      review_later_at: point.review_later_at ?? null,
       has_pending_question: point.has_pending_question ?? false
     }))
   }))
@@ -674,6 +676,7 @@ export async function studyKnowledgePoint(
       mastery: 0,
       dependencies: resp.data.dependencies,
       review_due: null,
+      review_later_at: null,
       has_pending_question: false
     },
     study_prompt: resp.data.explanation,
@@ -818,7 +821,8 @@ export async function scheduleKnowledgePointReview(
       status: 'learning',
       mastery_level: 20,
       mastery: 0.2,
-      review_due: new Date().toISOString()
+      review_due: new Date().toISOString(),
+      review_later_at: Date.now() / 1000
     })
   }
   const resp = await api.post<RawMasteryDetail>(
@@ -1009,6 +1013,7 @@ const mockMasteryModules: MasteryModule[] = [
         mastery_level: 90,
         dependencies: [],
         review_due: new Date().toISOString(),
+        review_later_at: Date.now() / 1000,
         has_pending_question: false
       },
       {
@@ -1020,6 +1025,7 @@ const mockMasteryModules: MasteryModule[] = [
         mastery_level: 54,
         dependencies: ['mock_m1_kp1'],
         review_due: null,
+        review_later_at: null,
         has_pending_question: true
       },
       {
@@ -1031,6 +1037,7 @@ const mockMasteryModules: MasteryModule[] = [
         mastery_level: 0,
         dependencies: ['mock_m1_kp2'],
         review_due: null,
+        review_later_at: null,
         has_pending_question: false
       }
     ]

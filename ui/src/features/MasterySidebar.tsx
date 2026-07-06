@@ -39,6 +39,19 @@ interface MasterySidebarProps {
 }
 
 const MASTERY_DOCUMENTS_CLEARED_EVENT = 'aitutor:mastery-documents-cleared'
+type MasteryProgressFilter = 'learning' | 'new' | 'review'
+
+const FILTER_LABELS: Record<MasteryProgressFilter, string> = {
+  learning: 'In Progress',
+  new: 'Not Started',
+  review: 'Review'
+}
+
+const FILTER_EMPTY_TEXT: Record<MasteryProgressFilter, string> = {
+  learning: 'No in-progress items.',
+  new: 'No not-started items.',
+  review: 'No review items yet.'
+}
 
 const BUILD_STATUS_LABELS: Record<MasteryBuildStatus, string> = {
   not_started: 'Processing',
@@ -76,6 +89,30 @@ function getBuildStatus(doc: MasteryDocumentSummary): MasteryBuildStatus {
 function isTerminal(doc: MasteryDocumentSummary): boolean {
   const status = getBuildStatus(doc)
   return status === 'ready' || status === 'build_failed' || status === 'rag_failed'
+}
+
+function isReviewPoint(point: MasteryKnowledgePoint): boolean {
+  return Boolean(point.review_later_at ?? point.review_due)
+}
+
+function pointMatchesFilter(point: MasteryKnowledgePoint, filter: MasteryProgressFilter): boolean {
+  if (filter === 'review') return isReviewPoint(point)
+  return point.status === filter
+}
+
+function filterModules(modules: MasteryModule[], filter: MasteryProgressFilter | null): MasteryModule[] {
+  if (!filter) return modules
+  return modules
+    .map((module) => {
+      const knowledgePoints = module.knowledge_points.filter((point) => pointMatchesFilter(point, filter))
+      return {
+        ...module,
+        knowledge_points: knowledgePoints,
+        mastered: knowledgePoints.filter((point) => point.status === 'mastered').length,
+        total: knowledgePoints.length
+      }
+    })
+    .filter((module) => module.knowledge_points.length > 0)
 }
 
 function statusTone(status: MasteryBuildStatus): string {
@@ -166,6 +203,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
   const [buildStatusOpen, setBuildStatusOpen] = useState(false)
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
   const [runningAction, setRunningAction] = useState<string | null>(null)
+  const [progressFilter, setProgressFilter] = useState<MasteryProgressFilter | null>(null)
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const mountedRef = useRef(true)
@@ -264,6 +302,7 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
   useEffect(() => {
     setSelectedPoint(null)
     setSelectedModule(null)
+    setProgressFilter(null)
   }, [selectedDocId])
 
   const readyCount = documents.filter((doc) => getBuildStatus(doc) === 'ready').length
@@ -280,6 +319,34 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
     return selectedModule ? { point: selectedPoint, module: selectedModule } : null
   }, [detail, selectedModule, selectedPoint])
   const selectedPointId = activeSelection?.point.id ?? selectedPoint?.id
+  const filteredModules = useMemo(
+    () => (detail ? filterModules(detail.modules, progressFilter) : []),
+    [detail, progressFilter]
+  )
+  const reviewPointCount = useMemo(
+    () => detail?.modules.reduce(
+      (total, module) => total + module.knowledge_points.filter(isReviewPoint).length,
+      0
+    ) ?? 0,
+    [detail]
+  )
+  const hasFilteredPoints = filteredModules.some((module) => module.knowledge_points.length > 0)
+
+  const handleProgressFilterSelect = useCallback((filter: MasteryProgressFilter) => {
+    setProgressFilter(filter)
+    if (!detail || !selectedPoint) return
+    const selectedPointStillVisible = detail.modules.some((module) =>
+      module.knowledge_points.some((point) => point.id === selectedPoint.id && pointMatchesFilter(point, filter))
+    )
+    if (!selectedPointStillVisible) {
+      setSelectedPoint(null)
+      setSelectedModule(null)
+    }
+  }, [detail, selectedPoint])
+
+  const handleProgressFilterClear = useCallback(() => {
+    setProgressFilter(null)
+  }, [])
 
   const handleKnowledgePointClick = async (point: MasteryKnowledgePoint, module: MasteryModule) => {
     if (!selectedDocument) return
@@ -466,18 +533,42 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
                   <ProgressBar doc={detail} />
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2 text-center text-[11px]">
-                  <div className="rounded-md bg-secondary p-2">
+                  <button
+                    type="button"
+                    onClick={() => handleProgressFilterSelect('learning')}
+                    className={cn(
+                      'rounded-md bg-secondary p-2 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      progressFilter === 'learning' && 'bg-accent text-accent-foreground ring-1 ring-primary/30'
+                    )}
+                    aria-pressed={progressFilter === 'learning'}
+                  >
                     <p className="font-semibold text-foreground">{detail.progress.counts.learning}</p>
                     <p className="text-muted-foreground">In Progress</p>
-                  </div>
-                  <div className="rounded-md bg-secondary p-2">
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleProgressFilterSelect('new')}
+                    className={cn(
+                      'rounded-md bg-secondary p-2 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      progressFilter === 'new' && 'bg-accent text-accent-foreground ring-1 ring-primary/30'
+                    )}
+                    aria-pressed={progressFilter === 'new'}
+                  >
                     <p className="font-semibold text-foreground">{detail.progress.counts.new}</p>
                     <p className="text-muted-foreground">Not Started</p>
-                  </div>
-                  <div className="rounded-md bg-secondary p-2">
-                    <p className="font-semibold text-foreground">{detail.progress.due_reviews}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleProgressFilterSelect('review')}
+                    className={cn(
+                      'rounded-md bg-secondary p-2 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      progressFilter === 'review' && 'bg-accent text-accent-foreground ring-1 ring-primary/30'
+                    )}
+                    aria-pressed={progressFilter === 'review'}
+                  >
+                    <p className="font-semibold text-foreground">{reviewPointCount}</p>
                     <p className="text-muted-foreground">Review</p>
-                  </div>
+                  </button>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <Button
@@ -561,11 +652,32 @@ export default function MasterySidebar({ onCollapse }: MasterySidebarProps) {
               )}
 
               <div className="mt-3">
-                <MasteryTree
-                  modules={detail.modules}
-                  selectedKnowledgePointId={selectedPointId}
-                  onKnowledgePointClick={handleKnowledgePointClick}
-                />
+                {progressFilter && (
+                  <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs">
+                    <span className="min-w-0 truncate text-muted-foreground">
+                      Showing: <span className="font-medium text-foreground">{FILTER_LABELS[progressFilter]}</span>
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 shrink-0 px-2 text-xs"
+                      onClick={handleProgressFilterClear}
+                    >
+                      Clear Filter
+                    </Button>
+                  </div>
+                )}
+                {hasFilteredPoints ? (
+                  <MasteryTree
+                    modules={filteredModules}
+                    selectedKnowledgePointId={selectedPointId}
+                    onKnowledgePointClick={handleKnowledgePointClick}
+                  />
+                ) : (
+                  <div className="rounded-md border border-dashed border-border bg-background p-4 text-center text-xs text-muted-foreground">
+                    {progressFilter ? FILTER_EMPTY_TEXT[progressFilter] : 'No knowledge points found.'}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
