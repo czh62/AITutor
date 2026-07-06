@@ -43,7 +43,7 @@ class QuizJudgeService:
         correct_answer: str,
         explanation: str,
         user_answer: str,
-        language: str = "zh",
+        language: str = "en",
     ):
         """流式 AI 判题，async generator 逐行 yield NDJSON。
 
@@ -142,7 +142,7 @@ class QuizJudgeService:
         explanation: str,
         user_answer: str,
         ai_judgment: str | None,
-        language: str = "zh",
+        language: str = "en",
     ):
         """流式追问讲解，async generator 逐行 yield NDJSON。
 

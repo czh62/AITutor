@@ -59,7 +59,7 @@ class QuizJudgeRequest(BaseModel):
     correct_answer: str
     explanation: str
     user_answer: str
-    language: str = "zh"
+    language: str = "en"
 
 
 class QuizFollowupRequest(BaseModel):
@@ -75,7 +75,7 @@ class QuizFollowupRequest(BaseModel):
     explanation: str
     user_answer: str
     ai_judgment: Optional[str] = None
-    language: str = "zh"
+    language: str = "en"
 
 
 __all__ = [
