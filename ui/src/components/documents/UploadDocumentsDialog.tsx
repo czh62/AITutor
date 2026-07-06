@@ -27,7 +27,7 @@ const DOCUMENT_UPLOAD_ACCEPT = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
 }
 const DOCUMENT_UPLOAD_EXTENSIONS = ['.txt', '.md', '.pdf', '.docx']
-const DOCUMENT_TYPE_ERROR = '仅Supported:  TXT、MD、PDF、DOCX 文件'
+const DOCUMENT_TYPE_ERROR = 'Supported formats: TXT, MD, PDF, DOCX.'
 const ACCEPTED_UPLOAD_STATUSES = new Set(['success', 'partial_success'])
 
 export default function UploadDocumentsDialog({
@@ -41,9 +41,9 @@ export default function UploadDocumentsDialog({
 
   const handleRejected = useCallback((rejected: FileRejection[]) => {
     rejected.forEach(({ file, errors }) => {
-      let msg = errors[0]?.message || `文件 ${file.name} 被拒绝`
+      let msg = errors[0]?.message || `File ${file.name} was rejected`
       if (msg.includes('file-invalid-type')) msg = DOCUMENT_TYPE_ERROR
-      if (msg.includes('file-too-large')) msg = '文件过大'
+      if (msg.includes('file-too-large')) msg = 'File is too large'
       setProgresses((p) => ({ ...p, [file.name]: 100 }))
       setFileErrors((p) => ({ ...p, [file.name]: msg }))
     })
@@ -129,7 +129,7 @@ export default function UploadDocumentsDialog({
         </DialogHeader>
         <FileUploader
           maxSize={200 * 1024 * 1024}
-          description="仅Supported:  TXT、MD、PDF、DOCX 文件，单文件最大 200MB"
+          description="Supported formats: TXT, MD, PDF, DOCX. Maximum file size: 200MB."
           accept={DOCUMENT_UPLOAD_ACCEPT}
           extensions={DOCUMENT_UPLOAD_EXTENSIONS}
           onUpload={handleUpload}

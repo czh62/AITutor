@@ -75,7 +75,7 @@ export default function FileUploader({
         <input {...getInputProps()} />
         <UploadCloudIcon className="h-8 w-8 text-muted-foreground" />
         <p className="text-sm font-medium">
-          {isDragActive ? '释放即可Upload' : '拖放文件到此处，或点击Select择文件'}
+          {isDragActive ? 'Drop files here' : 'Drop files here, or click to select files'}
         </p>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
@@ -118,7 +118,7 @@ export default function FileUploader({
                   )}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {error ? 'Failed' : done ? '完成' : `${progress}%`}
+                  {error ? 'Failed' : done ? 'Complete' : `${progress}%`}
                 </span>
               </li>
             )
@@ -127,7 +127,7 @@ export default function FileUploader({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Supported: 扩展名：{(extensions ?? ALL_EXTENSIONS).slice(0, 12).join(', ')}
+        Supported extensions: {(extensions ?? ALL_EXTENSIONS).slice(0, 12).join(', ')}
         {(extensions ?? ALL_EXTENSIONS).length > 12 ? '…' : ''}
       </p>
     </div>
