@@ -32,7 +32,7 @@ _CONSOLIDATE_SYSTEM_PROMPT = """你是记忆合并器。给定一段对话追踪
 - 忽略一次性寒暄、工具调用细节、过程性内容
 - 每条事实一行，用「- 」开头
 - 按主题分组（用「## 」二级标题）
-- 全程使用中文
+- Write the summary in English unless quoting user-provided text or source content
 - 若无值得记住的内容，输出「（暂无关键事实）」"""
 
 _CONSOLIDATE_USER_TEMPLATE = """已有记忆摘要：

@@ -1,0 +1,12 @@
+.git
+.env
+.venv
+__pycache__
+.pytest_cache
+data
+node_modules
+dist
+build
+ui/node_modules
+ui/dist
+ui/build

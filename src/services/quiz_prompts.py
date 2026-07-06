@@ -12,11 +12,16 @@
 
 from __future__ import annotations
 
+from ..core.prompting import DEMO_RESPONSE_LANGUAGE_RULE
+
 # ---------------------------------------------------------------------------
 #  规划器提示词（Phase 2: Plan）
 # ---------------------------------------------------------------------------
 
 PLAN_SYSTEM_PROMPT = """你是「出题规划器」。基于检索到的上下文和用户参数，给出本次要生成的所有题目蓝图。
+
+回答语言规则：
+{demo_response_language_rule}
 
 回复**恰好一个** JSON 对象，格式如下：
 
@@ -62,6 +67,9 @@ PLAN_USER_TEMPLATE = """## 用户指定的主题
 
 QUIZ_SYSTEM_PROMPT = """你正在写**一道**测验题（第 {question_number}/{total_questions} 道），依据规划器已经固定下来的 template。检索到的上下文和本轮已生成题目的列表都已提供，请据此做出有依据、不重复的题目。
 
+回答语言规则：
+{demo_response_language_rule}
+
 输出**恰好一个**符合下方 schema 的 JSON 对象——不要包代码块、不要加标题、不要有其他文字。
 
 JSON schema 示例（choice 类型）：
@@ -106,7 +114,10 @@ QUIZ_USER_TEMPLATE = """## 用户指定的主题（必须围绕此主题出题�
 #  修复提示词（仅在 JSON schema 不合法时调用）
 # ---------------------------------------------------------------------------
 
-REPAIR_SYSTEM_PROMPT = """你来修复一个不合法的题目 JSON。读 invalid payload 和检测到的问题，然后输出修正后的 JSON 对象——**只**输出 JSON，不要其他内容。
+REPAIR_SYSTEM_PROMPT = f"""你来修复一个不合法的题目 JSON。读 invalid payload 和检测到的问题，然后输出修正后的 JSON 对象——**只**输出 JSON，不要其他内容。
+
+回答语言规则：
+{DEMO_RESPONSE_LANGUAGE_RULE}
 
 硬性规则：
 - ``question_type`` 与 template 一致（**不要**改）。
@@ -117,6 +128,15 @@ REPAIR_SYSTEM_PROMPT = """你来修复一个不合法的题目 JSON。读 invali
 - 保留原 topic 和 difficulty 意图。
 - 返回 JSON 只包含字段：question_type, question, options, correct_answer, explanation。
 """
+
+PLAN_SYSTEM_PROMPT = PLAN_SYSTEM_PROMPT.replace(
+    "{demo_response_language_rule}",
+    DEMO_RESPONSE_LANGUAGE_RULE,
+)
+QUIZ_SYSTEM_PROMPT = QUIZ_SYSTEM_PROMPT.replace(
+    "{demo_response_language_rule}",
+    DEMO_RESPONSE_LANGUAGE_RULE,
+)
 
 REPAIR_USER_TEMPLATE = """## Template
 - question_id: {question_id}

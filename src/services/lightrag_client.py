@@ -34,11 +34,17 @@ class LightRAGClient:
         self._client: httpx.AsyncClient | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
-        """懒创建 httpx.AsyncClient。"""
+        """懒创建 httpx.AsyncClient。
+
+        强制 IPv4（local_address=0.0.0.0），因为 Docker 容器仅监听 127.0.0.1，
+        httpx 默认 DNS 解析 localhost 优先 IPv6 (::1) 导致 Connection refused → 502。
+        """
         if self._client is None:
+            transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
             self._client = httpx.AsyncClient(
                 base_url=self._base_url,
                 timeout=self._timeout,
+                transport=transport,
             )
         return self._client
 
@@ -196,6 +202,14 @@ class LightRAGClient:
         """GET /documents/pipeline_status — 获取流水线状态。"""
         try:
             resp = await self._get_client().get("/documents/pipeline_status")
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as exc:
+            self._handle_error(exc)
+
+    async def get_track_status(self, track_id: str) -> dict:
+        try:
+            resp = await self._get_client().get(f"/documents/track_status/{track_id}")
             resp.raise_for_status()
             return resp.json()
         except httpx.HTTPError as exc:

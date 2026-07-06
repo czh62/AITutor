@@ -50,6 +50,13 @@ def create_quiz_service(llm_client: LLMClient, lightrag_client: LightRAGClient) 
     return QuizService(llm=llm_client, lightrag=lightrag_client)
 
 
+def create_mastery_service(llm_client: LLMClient, lightrag_client: LightRAGClient) -> "MasteryService":
+    """创建 Mastery Path 服务。在 lifespan 启动时调用一次。"""
+    from ..mastery.service import MasteryService
+
+    return MasteryService(llm=llm_client, lightrag=lightrag_client)
+
+
 def create_memory_manager(llm_client: LLMClient) -> "MemoryManager":
     """创建记忆管理器（L1 追踪 + L2 摘要，SQLite 存储）。在 lifespan 启动时调用一次。"""
     from ..agentloop.memory import MemoryManager

@@ -42,6 +42,7 @@ class UnifiedContext:
     messages: list[dict[str, Any]] = field(default_factory=list)
     sources: list[SourceItem] = field(default_factory=list)
     mode: str = "mix"
+    web_search_available: bool = True
 
     def __post_init__(self) -> None:
         # 首条永远是 system
@@ -108,14 +109,15 @@ class UnifiedContext:
     # ------------------------------------------------------------------
 
     def extend_sources(self, sources: list[SourceItem]) -> None:
-        """合并新来源，按 id 去重。"""
+        """合并新来源，按 id 去重。空 id 的来源不可追踪，直接跳过。"""
         existing_ids = {s.id for s in self.sources if s.id}
         for s in sources:
-            if s.id and s.id in existing_ids:
+            if not s.id:
+                continue
+            if s.id in existing_ids:
                 continue
             self.sources.append(s)
-            if s.id:
-                existing_ids.add(s.id)
+            existing_ids.add(s.id)
 
     # ------------------------------------------------------------------
     #  序列化（ask_user 暂停恢复用）
@@ -127,6 +129,7 @@ class UnifiedContext:
             "session_id": self.session_id,
             "original_query": self.original_query,
             "mode": self.mode,
+            "web_search_available": self.web_search_available,
             "messages": self.messages,
             "sources": [
                 {
@@ -149,6 +152,7 @@ class UnifiedContext:
         ctx.session_id = snapshot["session_id"]
         ctx.original_query = snapshot["original_query"]
         ctx.mode = snapshot.get("mode", "mix")
+        ctx.web_search_available = snapshot.get("web_search_available", True)
         ctx.messages = list(snapshot.get("messages", []))
         ctx.sources = [
             SourceItem(

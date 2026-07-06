@@ -105,6 +105,9 @@ def _normalize_reference(ref: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(ref, dict):
         return None
     rid = ref.get("reference_id") or ref.get("id")
+    # 无标识的引用不可追踪，丢弃
+    if not rid:
+        return None
     fpath = ref.get("file_path")
     content = ref.get("content")
     if content is None:
